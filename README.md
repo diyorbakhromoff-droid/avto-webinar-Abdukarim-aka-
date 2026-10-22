@@ -109,6 +109,19 @@ O'z domeniga o'tish: `.env` da `APP_DOMAIN`, `ADMIN_DOMAIN`, `MINIAPP_URL`, `ADM
 `docker compose up -d`. Eski xabarlardagi tugmalar uchun `deploy/Caddyfile` oxiridagi yo'naltirishni yoqing
 (kamida 30 kun).
 
+## Nima tekshirildi va nima tekshirilmadi
+
+- Backend: 38 ta avtomatik test (PostgreSQL bilan), jumladan botning `/start` → telefon → vaqt → tarif →
+  chek → guruhda tasdiq oqimi (Telegram so'rovlari soxta sessiyada).
+- Mini App va admin panel haqiqiy API bilan brauzerda (Playwright) ochib ko'rildi: efir sinxron boshlanadi,
+  heartbeat va savollar yoziladi, admin paneldagi barcha sahifalar xatosiz yuklanadi.
+- **Tekshirilmagan:** haqiqiy Telegram bot bilan ishlash, Docker image larni yig'ish (bu muhitda Docker daemon
+  yo'q), Bunny token formati (Bunny panelidagi namunaga solishtiring: `backend/app/services/video.py`),
+  2000 lidli yuklama.
+
+Ma'lum bo'shliqlar: admin panelda videoni oldindan ko'rish yo'q; to'lovlar va savollar ro'yxati sahifalanmagan
+(oxirgi 500 tasi); lidlarni ommaviy biriktirish har bir lid uchun alohida so'rov bilan.
+
 ## Keyingi bosqichlar (TZ 13)
 
 - 2-bosqich: Payme / Click Merchant API orqali avtomatik tasdiq (hozir — havola + chek + qo'lda tasdiq).
