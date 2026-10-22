@@ -1,0 +1,46 @@
+# Manzillar .env dagi APP_DOMAIN va ADMIN_DOMAIN dan olinadi.
+# O'z domeniga o'tishda faqat .env o'zgaradi (MINIAPP_URL / ADMIN_URL ham).
+{
+	email {$ACME_EMAIL}
+}
+
+{$APP_DOMAIN} {
+	encode zstd gzip
+	handle /api/* {
+		reverse_proxy api:8000
+	}
+	handle {
+		root * /srv/miniapp
+		try_files {path} /index.html
+		file_server
+	}
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options nosniff
+	}
+}
+
+{$ADMIN_DOMAIN} {
+	encode zstd gzip
+	request_body /api/* {
+		max_size 60MB
+	}
+	handle /api/* {
+		reverse_proxy api:8000
+	}
+	handle {
+		root * /srv/admin
+		try_files {path} /index.html
+		file_server
+	}
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+	}
+}
+
+# Eski manzildan yangi domenga yo'naltirish (o'z domeniga o'tgandan keyin kamida 30 kun):
+# eski-app.duckdns.org {
+# 	redir https://{$APP_DOMAIN}{uri} permanent
+# }

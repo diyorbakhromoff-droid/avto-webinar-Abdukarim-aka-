@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="uz">
+<head>
+<meta charset="utf-8">
+<title>Admin — Lidlar</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#F6F5F1}
+a{color:#8A6417}a:hover{color:#5E440F}
+</style>
+</helmet>
+<div style="min-height: 1000px; box-sizing: border-box; background: #F6F5F1; color: #1C1B18; font-family: Manrope, system-ui, sans-serif; display: flex; flex-wrap: wrap">
+  <nav aria-label="Bo'limlar" style="flex: 1 1 220px; max-width: 260px; box-sizing: border-box; padding: 20px 14px; background: #FFFFFF; border-right: 1px solid #E4E1D8; display: flex; flex-direction: column; gap: 4px">
+    <div style="display: flex; align-items: center; gap: 10px; padding: 4px 8px 18px 8px">
+      <div style="width: 34px; height: 34px; border-radius: 10px; background: #1C1B18; color: #D4AF5A; display: flex; align-items: center; justify-content: center; font-weight: 800">ع</div>
+      <div style="display: flex; flex-direction: column">
+        <div style="font-size: 15px; font-weight: 800">Avtowebinar</div>
+        <div style="font-size: 12px; color: #6B665C">Arab tili voronkasi</div>
+      </div>
+    </div>
+    <sc-for list="{{nav}}" as="item" hint-placeholder-count="13">
+      <a href="#" style="{{item.style}}">{{item.label}}</a>
+    </sc-for>
+  </nav>
+
+  <main style="flex: 999 1 560px; min-width: 0; box-sizing: border-box; padding: 28px 32px; display: flex; flex-direction: column; gap: 18px">
+    <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px">
+      <h1 style="margin: 0; font-size: 26px; font-weight: 800">Lidlar</h1>
+      <button type="button" style="height: 40px; padding: 0 16px; border-radius: 10px; border: 1px solid #D9D5CA; background: #FFFFFF; font-family: inherit; font-size: 14px; font-weight: 700; color: #1C1B18">Excel eksport</button>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 8px">
+      <div style="font-size: 13px; font-weight: 700; color: #6B665C">Qo'ng'iroq ro'yxatlari</div>
+      <div style="display: flex; flex-wrap: wrap; gap: 8px">
+        <sc-for list="{{lists}}" as="l" hint-placeholder-count="9">
+          <button type="button" style="{{l.style}}">{{l.label}} <span style="font-weight: 800">{{l.n}}</span></button>
+        </sc-for>
+      </div>
+    </div>
+
+    <div style="display: flex; flex-wrap: wrap; gap: 10px">
+      <label style="flex: 2 1 240px; display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 700; color: #6B665C">Qidiruv
+        <input type="text" placeholder="Ism yoki telefon" style="height: 40px; box-sizing: border-box; padding: 0 12px; border-radius: 10px; border: 1px solid #D9D5CA; font-family: inherit; font-size: 14px">
+      </label>
+      <label style="flex: 1 1 150px; display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 700; color: #6B665C">Qadam
+        <select style="height: 40px; padding: 0 10px; border-radius: 10px; border: 1px solid #D9D5CA; background: #FFFFFF; font-family: inherit; font-size: 14px"><option>Ofertagacha chiqib ketgan</option></select>
+      </label>
+      <label style="flex: 1 1 150px; display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 700; color: #6B665C">Manba
+        <select style="height: 40px; padding: 0 10px; border-radius: 10px; border: 1px solid #D9D5CA; background: #FFFFFF; font-family: inherit; font-size: 14px"><option>Barchasi</option></select>
+      </label>
+      <label style="flex: 1 1 150px; display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 700; color: #6B665C">Menejer
+        <select style="height: 40px; padding: 0 10px; border-radius: 10px; border: 1px solid #D9D5CA; background: #FFFFFF; font-family: inherit; font-size: 14px"><option>Menga biriktirilgan</option></select>
+      </label>
+    </div>
+
+    <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 10px 14px; border-radius: 12px; background: #1C1B18; color: #F6F5F1">
+      <div style="font-size: 14px; font-weight: 700">3 ta lid tanlandi</div>
+      <button type="button" style="height: 36px; padding: 0 14px; border-radius: 9px; border: 0; background: #D4AF5A; font-family: inherit; font-size: 13px; font-weight: 800; color: #1A140C">Bot orqali xabar</button>
+      <button type="button" style="height: 36px; padding: 0 14px; border-radius: 9px; border: 1px solid #4A463F; background: transparent; font-family: inherit; font-size: 13px; font-weight: 700; color: #F6F5F1">Menejerga biriktirish</button>
+    </div>
+
+    <div style="overflow-x: auto; border-radius: 16px; background: #FFFFFF; border: 1px solid #E4E1D8">
+      <table style="width: 100%; min-width: 1060px; border-collapse: collapse; font-size: 14px">
+        <thead>
+          <tr style="text-align: left; color: #6B665C; font-size: 12px">
+            <th style="padding: 12px 14px; border-bottom: 1px solid #E4E1D8; width: 28px"><input type="checkbox" aria-label="Hammasini tanlash"></th>
+            <th style="padding: 12px 8px; border-bottom: 1px solid #E4E1D8">Ism</th>
+            <th style="padding: 12px 8px; border-bottom: 1px solid #E4E1D8">Telefon</th>
+            <th style="padding: 12px 8px; border-bottom: 1px solid #E4E1D8">Manba</th>
+            <th style="padding: 12px 8px; border-bottom: 1px solid #E4E1D8">1-kun</th>
+            <th style="padding: 12px 8px; border-bottom: 1px solid #E4E1D8">2-kun</th>
+            <th style="padding: 12px 8px; border-bottom: 1px solid #E4E1D8">Oferta</th>
+            <th style="padding: 12px 8px; border-bottom: 1px solid #E4E1D8">To'lov</th>
+            <th style="padding: 12px 8px; border-bottom: 1px solid #E4E1D8">Oxirgi qadam</th>
+            <th style="padding: 12px 8px; border-bottom: 1px solid #E4E1D8">Qancha vaqtdan beri</th>
+            <th style="padding: 12px 14px 12px 8px; border-bottom: 1px solid #E4E1D8">Menejer</th>
+          </tr>
+        </thead>
+        <tbody>
+          <sc-for list="{{leads}}" as="r" hint-placeholder-count="8">
+            <tr>
+              <td style="padding: 12px 14px; border-bottom: 1px solid #F1EEE6"><input type="checkbox" checked="{{r.sel}}" aria-label="Tanlash"></td>
+              <td style="padding: 12px 8px; border-bottom: 1px solid #F1EEE6; font-weight: 700"><a href="AdminLeadCard.dc.html" style="color: #1C1B18; text-decoration: none">{{r.name}}</a></td>
+              <td style="padding: 12px 8px; border-bottom: 1px solid #F1EEE6; font-variant-numeric: tabular-nums"><a href="#">{{r.phone}}</a></td>
+              <td style="padding: 12px 8px; border-bottom: 1px solid #F1EEE6; color: #6B665C">{{r.src}}</td>
+              <td style="padding: 12px 8px; border-bottom: 1px solid #F1EEE6; font-variant-numeric: tabular-nums">{{r.d1}}</td>
+              <td style="padding: 12px 8px; border-bottom: 1px solid #F1EEE6; font-variant-numeric: tabular-nums">{{r.d2}}</td>
+              <td style="padding: 12px 8px; border-bottom: 1px solid #F1EEE6">{{r.offer}}</td>
+              <td style="padding: 12px 8px; border-bottom: 1px solid #F1EEE6"><span style="{{r.payStyle}}">{{r.pay}}</span></td>
+              <td style="padding: 12px 8px; border-bottom: 1px solid #F1EEE6">{{r.step}}</td>
+              <td style="padding: 12px 8px; border-bottom: 1px solid #F1EEE6; color: #6B665C">{{r.since}}</td>
+              <td style="padding: 12px 14px 12px 8px; border-bottom: 1px solid #F1EEE6; color: #6B665C">{{r.mgr}}</td>
+            </tr>
+          </sc-for>
+        </tbody>
+      </table>
+    </div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1000}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const labels = ['Dashboard', 'Voronkalar', 'Webinar videosi', 'Slotlar', 'Progrev zanjiri', 'Sotuv bloki', 'Izohlar', 'Lidlar', 'Savollar', "To'lovlar", 'Ommaviy xabar', 'Statistika', 'Sozlamalar'];
+    const active = 'Lidlar';
+    const nav = labels.map((label) => ({
+      label,
+      style: 'display: block; padding: 10px 12px; border-radius: 10px; font-size: 14px; text-decoration: none; ' +
+        (label === active ? 'background: #F5EBD3; color: #5E440F; font-weight: 800' : 'color: #3A3731; font-weight: 600')
+    }));
+    const chip = (sel) => 'height: 36px; padding: 0 12px; border-radius: 999px; font-family: inherit; font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 6px; ' +
+      (sel ? 'border: 0; background: #1C1B18; color: #FFFFFF' : 'border: 1px solid #D9D5CA; background: #FFFFFF; color: #1C1B18');
+    const lists = [
+      ["Boshlang'ich to'laganlar", 6], ["To'liq to'laganlar", 9], ["Ofertagacha chiqib ketgan", 31, true],
+      ["Ofertani ko'rgan, to'lamagan", 56], ['Tugma bosgan, chek yubormagan', 22], ['Chek rad etilgan', 2],
+      ['Sessiya tanlamagan', 47], ["2-kunni ko'rmagan", 45], ['Botni bloklagan', 12]
+    ].map(([label, n, sel]) => ({ label, n, style: chip(sel) }));
+    const pay = (t) => 'padding: 3px 8px; border-radius: 6px; font-size: 12px; font-weight: 800; ' +
+      (t === "yo'q" ? 'background: #F1EEE6; color: #4A463F' : t === "boshlang'ich" ? 'background: #FBF3E2; color: #8A6417' : 'background: #E3F1E7; color: #23703F');
+    const leads = [
+      ['Madina Karimova', '+998 90 123 45 67', 'ig_reels3', '71 daq', '34 daq', "yo'q", "yo'q", 'Ofertagacha chiqdi', '3 soat', 'Nodira', true],
+      ['Sevara Aliyeva', '+998 93 555 12 09', 'ig_story1', '74 daq', '41 daq', "yo'q", "yo'q", 'Ofertagacha chiqdi', '5 soat', 'Nodira', true],
+      ['Dilnoza Tursunova', '+998 97 700 41 18', 'tg_ads', '68 daq', '29 daq', "yo'q", "yo'q", 'Ofertagacha chiqdi', '6 soat', '—', true],
+      ['Gulnora Rahimova', '+998 99 410 22 31', 'ig_reels3', '74 daq', '55 daq', 'ha', "yo'q", 'Ofertagacha chiqdi', '1 kun', 'Aziz', false],
+      ['Zarina Yusupova', '+998 91 230 88 14', 'ig_story1', '60 daq', '47 daq', 'ha', "yo'q", 'Ofertagacha chiqdi', '1 kun', 'Aziz', false],
+      ['Malika Ergasheva', '+998 94 615 70 02', 'tg_ads', '73 daq', '50 daq', 'ha', "yo'q", 'Ofertagacha chiqdi', '2 kun', 'Nodira', false]
+    ].map(([name, phone, src, d1, d2, offer, p, step, since, mgr, sel]) => ({ name, phone, src, d1, d2, offer, pay: p, payStyle: pay(p), step, since, mgr, sel }));
+    return { nav, lists, leads };
+  }
+}
+</script>
+</body>
+</html>

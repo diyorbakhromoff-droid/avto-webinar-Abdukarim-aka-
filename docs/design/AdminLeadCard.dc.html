@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="uz">
+<head>
+<meta charset="utf-8">
+<title>Admin — Lid kartasi</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#F6F5F1}
+a{color:#8A6417}a:hover{color:#5E440F}
+</style>
+</helmet>
+<div style="min-height: 1150px; box-sizing: border-box; background: #F6F5F1; color: #1C1B18; font-family: Manrope, system-ui, sans-serif; display: flex; flex-wrap: wrap">
+  <nav aria-label="Bo'limlar" style="flex: 1 1 220px; max-width: 260px; box-sizing: border-box; padding: 20px 14px; background: #FFFFFF; border-right: 1px solid #E4E1D8; display: flex; flex-direction: column; gap: 4px">
+    <div style="display: flex; align-items: center; gap: 10px; padding: 4px 8px 18px 8px">
+      <div style="width: 34px; height: 34px; border-radius: 10px; background: #1C1B18; color: #D4AF5A; display: flex; align-items: center; justify-content: center; font-weight: 800">ع</div>
+      <div style="display: flex; flex-direction: column">
+        <div style="font-size: 15px; font-weight: 800">Avtowebinar</div>
+        <div style="font-size: 12px; color: #6B665C">Arab tili voronkasi</div>
+      </div>
+    </div>
+    <sc-for list="{{nav}}" as="item" hint-placeholder-count="13">
+      <a href="#" style="{{item.style}}">{{item.label}}</a>
+    </sc-for>
+  </nav>
+
+  <main style="flex: 999 1 560px; min-width: 0; box-sizing: border-box; padding: 28px 32px; display: flex; flex-direction: column; gap: 20px">
+    <a href="AdminLeads.dc.html" style="font-size: 14px; font-weight: 700; text-decoration: none">← Lidlar</a>
+    <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px">
+      <div style="display: flex; flex-direction: column; gap: 4px">
+        <h1 style="margin: 0; font-size: 26px; font-weight: 800">Madina Karimova</h1>
+        <div style="font-size: 14px; color: #6B665C">@madina_k · manba ig_reels3 · ro'yxat 23-oktabr, 12:04</div>
+      </div>
+      <div style="display: flex; flex-wrap: wrap; gap: 8px">
+        <a href="#" style="height: 42px; padding: 0 16px; border-radius: 10px; background: #1C1B18; color: #FFFFFF; font-size: 14px; font-weight: 800; display: flex; align-items: center; text-decoration: none">Qo'ng'iroq: +998 90 123 45 67</a>
+        <button type="button" style="height: 42px; padding: 0 16px; border-radius: 10px; border: 1px solid #D9D5CA; background: #FFFFFF; font-family: inherit; font-size: 14px; font-weight: 700; color: #1C1B18">Bot orqali xabar</button>
+      </div>
+    </div>
+
+    <div style="display: flex; flex-wrap: wrap; gap: 20px; align-items: flex-start">
+      <div style="flex: 2 1 380px; min-width: 0; display: flex; flex-direction: column; gap: 20px">
+        <section style="padding: 20px; border-radius: 16px; background: #FFFFFF; border: 1px solid #E4E1D8; display: flex; flex-direction: column; gap: 14px">
+          <h2 style="margin: 0; font-size: 17px; font-weight: 800">Efirni ko'rish</h2>
+          <div style="display: flex; flex-direction: column; gap: 6px">
+            <div style="display: flex; justify-content: space-between; font-size: 14px"><span style="font-weight: 700">1-kun · 23-okt 20:00</span><span style="font-variant-numeric: tabular-nums">71 / 74 daq · 96%</span></div>
+            <div style="height: 10px; border-radius: 5px; background: #F1EEE6; overflow: hidden"><div style="width: 96%; height: 10px; background: #23703F"></div></div>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 6px">
+            <div style="display: flex; justify-content: space-between; font-size: 14px"><span style="font-weight: 700">2-kun · 24-okt 20:00</span><span style="font-variant-numeric: tabular-nums">34 / 82 daq · oferta 58-daqiqada</span></div>
+            <div style="position: relative; height: 10px; border-radius: 5px; background: #F1EEE6">
+              <div style="width: 41%; height: 10px; border-radius: 5px; background: #B8892A"></div>
+              <div aria-hidden="true" style="position: absolute; left: 71%; top: -4px; width: 2px; height: 18px; background: #1C1B18"></div>
+            </div>
+            <div style="font-size: 13px; color: #8F2A1E; font-weight: 700">Ofertagacha chiqib ketgan</div>
+          </div>
+        </section>
+
+        <section style="padding: 20px; border-radius: 16px; background: #FFFFFF; border: 1px solid #E4E1D8; display: flex; flex-direction: column; gap: 12px">
+          <h2 style="margin: 0; font-size: 17px; font-weight: 800">To'lov va deadline</h2>
+          <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; font-size: 14px">
+            <div style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 12px; color: #6B665C; font-weight: 700">Holat</span><span style="font-weight: 700">To'lov yo'q</span></div>
+            <div style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 12px; color: #6B665C; font-weight: 700">Shaxsiy deadline</span><span style="font-weight: 700">26-okt, 21:22</span></div>
+            <label style="display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: #6B665C; font-weight: 700">Qolgan summa
+              <input type="text" placeholder="so'm" style="height: 38px; box-sizing: border-box; padding: 0 10px; border-radius: 9px; border: 1px solid #D9D5CA; font-family: inherit; font-size: 14px">
+            </label>
+            <label style="display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: #6B665C; font-weight: 700">To'lov sanasi
+              <input type="date" style="height: 38px; box-sizing: border-box; padding: 0 10px; border-radius: 9px; border: 1px solid #D9D5CA; font-family: inherit; font-size: 14px">
+            </label>
+          </div>
+          <div style="display: flex; flex-wrap: wrap; gap: 8px">
+            <button type="button" style="height: 38px; padding: 0 12px; border-radius: 9px; border: 1px solid #D9D5CA; background: #FFFFFF; font-family: inherit; font-size: 13px; font-weight: 700; color: #1C1B18">Chek yuklash</button>
+            <button type="button" style="height: 38px; padding: 0 12px; border-radius: 9px; border: 1px solid #D9D5CA; background: #FFFFFF; font-family: inherit; font-size: 13px; font-weight: 700; color: #1C1B18">Deadline uzaytirish</button>
+            <button type="button" style="height: 38px; padding: 0 12px; border-radius: 9px; border: 1px solid #D9D5CA; background: #FFFFFF; font-family: inherit; font-size: 13px; font-weight: 700; color: #1C1B18">Kanalga havola yuborish</button>
+          </div>
+        </section>
+
+        <section style="padding: 20px; border-radius: 16px; background: #FFFFFF; border: 1px solid #E4E1D8; display: flex; flex-direction: column; gap: 12px">
+          <h2 style="margin: 0; font-size: 17px; font-weight: 800">Aloqa natijasi</h2>
+          <div style="display: flex; flex-wrap: wrap; gap: 6px">
+            <button type="button" style="height: 36px; padding: 0 12px; border-radius: 999px; border: 1px solid #D9D5CA; background: #FFFFFF; font-family: inherit; font-size: 13px; font-weight: 700; color: #1C1B18">Javob bermadi</button>
+            <button type="button" style="height: 36px; padding: 0 12px; border-radius: 999px; border: 0; background: #1C1B18; font-family: inherit; font-size: 13px; font-weight: 700; color: #FFFFFF">Qayta qo'ng'iroq</button>
+            <button type="button" style="height: 36px; padding: 0 12px; border-radius: 999px; border: 1px solid #D9D5CA; background: #FFFFFF; font-family: inherit; font-size: 13px; font-weight: 700; color: #1C1B18">Sotildi</button>
+            <button type="button" style="height: 36px; padding: 0 12px; border-radius: 999px; border: 1px solid #D9D5CA; background: #FFFFFF; font-family: inherit; font-size: 13px; font-weight: 700; color: #1C1B18">Rad etdi</button>
+          </div>
+          <div style="display: flex; flex-wrap: wrap; gap: 8px">
+            <input type="datetime-local" aria-label="Qayta qo'ng'iroq vaqti" style="flex: 1 1 180px; height: 40px; box-sizing: border-box; padding: 0 10px; border-radius: 9px; border: 1px solid #D9D5CA; font-family: inherit; font-size: 14px">
+            <input type="text" aria-label="Izoh" placeholder="Izoh: ertaga kechqurun qulay ekan" style="flex: 2 1 240px; height: 40px; box-sizing: border-box; padding: 0 10px; border-radius: 9px; border: 1px solid #D9D5CA; font-family: inherit; font-size: 14px">
+            <button type="button" style="height: 40px; padding: 0 16px; border-radius: 9px; border: 0; background: #8A6417; font-family: inherit; font-size: 14px; font-weight: 800; color: #FFFFFF">Saqlash</button>
+          </div>
+        </section>
+      </div>
+
+      <section style="flex: 3 1 420px; min-width: 0; padding: 20px; border-radius: 16px; background: #FFFFFF; border: 1px solid #E4E1D8; display: flex; flex-direction: column; gap: 4px">
+        <h2 style="margin: 0 0 10px 0; font-size: 17px; font-weight: 800">Voqealar lentasi</h2>
+        <sc-for list="{{events}}" as="e" hint-placeholder-count="10">
+          <div style="display: grid; grid-template-columns: 110px 14px minmax(0, 1fr); gap: 12px; align-items: start">
+            <div style="font-size: 13px; color: #6B665C; font-variant-numeric: tabular-nums; padding-top: 1px">{{e.t}}</div>
+            <div style="display: flex; flex-direction: column; align-items: center; align-self: stretch">
+              <div style="{{e.dot}}"></div>
+              <div style="flex: 1; width: 2px; background: #EFECE4; min-height: 26px"></div>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 2px; padding-bottom: 12px">
+              <div style="font-size: 14px; font-weight: 700">{{e.title}}</div>
+              <div style="font-size: 13px; color: #6B665C">{{e.sub}}</div>
+            </div>
+          </div>
+        </sc-for>
+      </section>
+    </div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1150}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const labels = ['Dashboard', 'Voronkalar', 'Webinar videosi', 'Slotlar', 'Progrev zanjiri', 'Sotuv bloki', 'Izohlar', 'Lidlar', 'Savollar', "To'lovlar", 'Ommaviy xabar', 'Statistika', 'Sozlamalar'];
+    const active = 'Lidlar';
+    const nav = labels.map((label) => ({
+      label,
+      style: 'display: block; padding: 10px 12px; border-radius: 10px; font-size: 14px; text-decoration: none; ' +
+        (label === active ? 'background: #F5EBD3; color: #5E440F; font-weight: 800' : 'color: #3A3731; font-weight: 600')
+    }));
+    const dot = (k) => 'width: 12px; height: 12px; border-radius: 50%; margin-top: 3px; background: ' + ({ g: '#23703F', a: '#B8892A', r: '#B3261E', n: '#C9C3B5', m: '#1C1B18' }[k]);
+    const events = [
+      ['25-okt 10:12', 'Menejer izohi — Nodira', "Javob bermadi, kechqurun qayta qo'ng'iroq", 'm'],
+      ['24-okt 22:00', 'Bot: «Taklif va narx» eslatmasi', 'Ofertagacha chiqib ketganlar uchun', 'n'],
+      ['24-okt 20:34', "2-kundan chiqdi", "34 daqiqa ko'rdi — ofertagacha 24 daqiqa qolgan", 'r'],
+      ['24-okt 20:00', '2-kunga kirdi', "o'z vaqtida", 'a'],
+      ['23-okt 21:14', "1-kun tugadi", "71 / 74 daqiqa ko'rdi — 2-kunga taklif oldi", 'g'],
+      ['23-okt 20:02', '1-kunga kirdi', '2 daqiqa kech', 'a'],
+      ['23-okt 18:00', 'Bot: «Efirgacha 2 soat»', 'yetkazildi', 'n'],
+      ['23-okt 12:05', 'Sessiya tanladi', '1-kun: 23-okt 20:00 · 2-kun: 24-okt 20:00', 'g'],
+      ['23-okt 12:04', 'Telefon berdi', '+998 90 123 45 67', 'g'],
+      ['23-okt 12:03', '/start', 'manba: ig_reels3', 'n']
+    ].map(([t, title, sub, k]) => ({ t, title, sub, dot: dot(k) }));
+    return { nav, events };
+  }
+}
+</script>
+</body>
+</html>

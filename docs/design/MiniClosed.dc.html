@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="uz">
+<head>
+<meta charset="utf-8">
+<title>Mini App — kirish yopiq</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&amp;family=Amiri:wght@400;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#D4AF5A}a:hover{color:#E8C877}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; overflow: hidden; background: #120F0B; color: #F4EEE3; font-family: Manrope, system-ui, sans-serif; display: flex; flex-direction: column">
+  <div style="flex: 1; padding: 0 28px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; text-align: center">
+    <div style="width: 72px; height: 72px; border-radius: 50%; background: #1C1813; border: 1px solid #3A3127; display: flex; align-items: center; justify-content: center">
+      <svg aria-hidden="true" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="{{gold}}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 6v6l4 2"></path></svg>
+    </div>
+    <h1 style="margin: 0; font-size: 26px; font-weight: 800">Efir boshlanib ketgan</h1>
+    <div style="font-size: 15px; line-height: 1.55; color: #B3A893">1-kun efiri 20:00 da boshlangan. Kech kirish 15 daqiqagacha mumkin edi — boshidan ko'rishingiz uchun boshqa vaqt tanlang.</div>
+    <div style="padding: 8px 14px; border-radius: 999px; background: #1C1813; font-size: 13px; color: #B3A893">Qayta tanlash: 2 ta imkoniyat qoldi</div>
+  </div>
+  <div style="padding: 0 20px 24px 20px; display: flex; flex-direction: column; gap: 10px">
+    <button type="button" style="height: 56px; border-radius: 16px; border: 0; background: {{gold}}; color: #1A140C; font-family: inherit; font-size: 17px; font-weight: 800">Boshqa vaqt tanlash</button>
+    <button type="button" style="height: 52px; border-radius: 14px; border: 1px solid #3A3127; background: transparent; color: #F4EEE3; font-family: inherit; font-size: 16px; font-weight: 700">Botga qaytish</button>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"gold":{"editor":"color","default":"#D4AF5A","options":["#D4AF5A","#C99A3B","#E2C27A"]},"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { gold: this.props.gold ?? '#D4AF5A' };
+  }
+}
+</script>
+</body>
+</html>

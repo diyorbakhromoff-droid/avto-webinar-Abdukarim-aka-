@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="uz">
+<head>
+<meta charset="utf-8">
+<title>Mini App — kunlar orasida</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&amp;family=Amiri:wght@400;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#D4AF5A}a:hover{color:#E8C877}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; position: relative; overflow: hidden; background: #120F0B; color: #F4EEE3; font-family: Manrope, system-ui, sans-serif; display: flex; flex-direction: column">
+  <div aria-hidden="true" style="position: absolute; bottom: 60px; left: -20px; font-family: Amiri, serif; font-size: 160px; line-height: 1; color: {{gold}}; opacity: 0.06; pointer-events: none">أحسنت</div>
+
+  <div style="padding: 32px 20px 0 20px; display: flex; flex-direction: column; align-items: center; gap: 14px; text-align: center; position: relative">
+    <div style="width: 64px; height: 64px; border-radius: 50%; border: 2px solid {{gold}}; display: flex; align-items: center; justify-content: center">
+      <svg aria-hidden="true" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="{{gold}}" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg>
+    </div>
+    <h1 style="margin: 0; font-size: 26px; font-weight: 800">1-kun yakunlandi</h1>
+    <div style="font-size: 15px; color: #B3A893; line-height: 1.5; max-width: 300px">Siz videoning 92% ini ko'rdingiz. 2-kunda kurs dasturi va qatnashish shartlari aytiladi.</div>
+  </div>
+
+  <div style="margin: 24px 20px 0 20px; padding: 18px 20px; border-radius: 20px; background: #1C1813; border: 1px solid #3A3127; display: flex; align-items: center; justify-content: space-between">
+    <div style="display: flex; flex-direction: column; gap: 4px">
+      <div style="font-size: 13px; color: #B3A893; font-weight: 600">2-kun efiri</div>
+      <div style="font-size: 16px; font-weight: 700">Ertaga, 20:00</div>
+    </div>
+    <div style="font-size: 30px; font-weight: 800; font-variant-numeric: tabular-nums; color: {{gold}}">22:41:09</div>
+  </div>
+
+  <div style="margin: 16px 20px 0 20px; display: flex; flex-direction: column; gap: 12px; position: relative">
+    <div style="font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase; color: {{gold}}; font-weight: 700">1-kun xulosasi</div>
+    <div style="display: flex; gap: 12px; align-items: flex-start">
+      <div style="width: 26px; height: 26px; border-radius: 8px; background: #26201A; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 800; color: {{gold}}">1</div>
+      <div style="font-size: 15px; line-height: 1.5">Arab alifbosi 28 harfdan iborat, o'ngdan chapga yoziladi</div>
+    </div>
+    <div style="display: flex; gap: 12px; align-items: flex-start">
+      <div style="width: 26px; height: 26px; border-radius: 8px; background: #26201A; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 800; color: {{gold}}">2</div>
+      <div style="font-size: 15px; line-height: 1.5">Harf so'zdagi o'rniga qarab 4 xil shaklda yoziladi</div>
+    </div>
+    <div style="display: flex; gap: 12px; align-items: flex-start">
+      <div style="width: 26px; height: 26px; border-radius: 8px; background: #26201A; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 800; color: {{gold}}">3</div>
+      <div style="font-size: 15px; line-height: 1.5">Uy vazifasi: 5 ta harfni daftarga 10 martadan yozing</div>
+    </div>
+  </div>
+
+  <div style="margin-top: auto; padding: 16px 20px 24px 20px; display: flex; flex-direction: column; gap: 10px; position: relative">
+    <div style="font-size: 13px; color: #B3A893; text-align: center">Eslatma ertaga 18:00 va 19:45 da botga keladi</div>
+    <button type="button" style="height: 52px; border-radius: 14px; border: 1px solid #3A3127; background: #120F0B; color: #F4EEE3; font-family: inherit; font-size: 16px; font-weight: 700">Botga qaytish</button>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"gold":{"editor":"color","default":"#D4AF5A","options":["#D4AF5A","#C99A3B","#E2C27A"]},"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { gold: this.props.gold ?? '#D4AF5A' };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="uz">
+<head>
+<meta charset="utf-8">
+<title>Adminlar guruhi — chek tasdig'i</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#6AB2F2}a:hover{color:#8CC5F7}
+</style>
+</helmet>
+<div style="width: 390px; height: 900px; box-sizing: border-box; overflow: hidden; background: #0E1621; color: #E9EEF3; font-family: Manrope, system-ui, sans-serif; display: flex; flex-direction: column">
+  <div style="display: flex; align-items: center; gap: 12px; padding: 12px 16px; background: #17212B">
+    <div style="width: 40px; height: 40px; border-radius: 50%; background: #3D5A2A; display: flex; align-items: center; justify-content: center; font-size: 15px; font-weight: 800; color: #E9EEF3">CH</div>
+    <div style="display: flex; flex-direction: column; gap: 1px">
+      <div style="font-size: 16px; font-weight: 700">Cheklar — Arab tili</div>
+      <div style="font-size: 13px; color: #8A9AAB">4 a'zo</div>
+    </div>
+  </div>
+
+  <div style="flex: 1; padding: 12px 10px; display: flex; flex-direction: column; gap: 10px; overflow: hidden">
+    <div style="align-self: flex-start; display: flex; flex-direction: column; gap: 4px; width: 330px">
+      <div style="border-radius: 14px 14px 4px 4px; background: #182533; overflow: hidden">
+        <div style="height: 150px; background: #2A3B4D; display: flex; align-items: center; justify-content: center; font-size: 12px; color: #B8C6D3">chek rasmi</div>
+        <div style="padding: 10px 12px; font-size: 14px; line-height: 1.55; display: flex; flex-direction: column; gap: 2px">
+          <div style="font-weight: 800">Yangi chek #1042</div>
+          <div>Lid: Madina Karimova</div>
+          <div>Telefon: <a href="#">+998 90 123 45 67</a></div>
+          <div>Tarif: Standart · Karta</div>
+          <div>Summa: 100 000 so'm (boshlang'ich)</div>
+          <div>Deadline: 26-oktabr, 21:22 — muddat ichida</div>
+        </div>
+      </div>
+      <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px">
+        <button type="button" style="height: 44px; border-radius: 4px 4px 4px 14px; border: 0; background: #1F3346; color: #E9EEF3; font-family: inherit; font-size: 14px; font-weight: 700">Tasdiqlash</button>
+        <button type="button" style="height: 44px; border-radius: 4px 4px 14px 4px; border: 0; background: #1F3346; color: #E9EEF3; font-family: inherit; font-size: 14px; font-weight: 700">Rad etish</button>
+      </div>
+    </div>
+
+    <div style="align-self: flex-start; display: flex; flex-direction: column; gap: 4px; width: 330px">
+      <div style="border-radius: 14px; background: #182533; padding: 10px 12px; font-size: 14px; line-height: 1.55; display: flex; flex-direction: column; gap: 2px">
+        <div style="font-weight: 800">Chek #1041</div>
+        <div>Lid: Sevara Aliyeva · Payme</div>
+        <div>Summa: [narx] so'm (to'liq)</div>
+        <div style="margin-top: 6px; padding: 6px 10px; border-radius: 8px; background: #1E3A2B; color: #9FE0B5; font-weight: 700">Tasdiqlandi — Nodira (sotuv), 21:41</div>
+        <div style="color: #8A9AAB">Lidga kanal havolasi yuborildi</div>
+      </div>
+    </div>
+
+    <div style="align-self: flex-start; display: flex; flex-direction: column; gap: 4px; width: 330px">
+      <div style="border-radius: 14px; background: #182533; padding: 10px 12px; font-size: 14px; line-height: 1.55; display: flex; flex-direction: column; gap: 2px">
+        <div style="font-weight: 800">Chek #1040</div>
+        <div>Lid: Dilnoza Tursunova · Karta</div>
+        <div style="margin-top: 6px; padding: 6px 10px; border-radius: 8px; background: #3A2A1A; color: #F2C48D; font-weight: 700">Diqqat: bu fayl #1012 chekda ham yuborilgan</div>
+      </div>
+    </div>
+
+    <div style="align-self: flex-start; display: flex; flex-direction: column; gap: 4px; width: 330px">
+      <div style="padding: 10px 12px; border-radius: 14px 14px 4px 4px; background: #182533; font-size: 14px; line-height: 1.5">Rad etish sababi — #1039:</div>
+      <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px">
+        <button type="button" style="height: 40px; border-radius: 4px; border: 0; background: #1F3346; color: #E9EEF3; font-family: inherit; font-size: 13px; font-weight: 600">Summa mos emas</button>
+        <button type="button" style="height: 40px; border-radius: 4px; border: 0; background: #1F3346; color: #E9EEF3; font-family: inherit; font-size: 13px; font-weight: 600">Chek o'qilmaydi</button>
+        <button type="button" style="height: 40px; border-radius: 4px 4px 4px 14px; border: 0; background: #1F3346; color: #E9EEF3; font-family: inherit; font-size: 13px; font-weight: 600">To'lov topilmadi</button>
+        <button type="button" style="height: 40px; border-radius: 4px 4px 14px 4px; border: 0; background: #1F3346; color: #E9EEF3; font-family: inherit; font-size: 13px; font-weight: 600">Boshqa sabab</button>
+      </div>
+    </div>
+  </div>
+
+  <div style="padding: 10px 16px 14px 16px; background: #17212B; font-size: 12px; color: #8A9AAB; line-height: 1.45">Tugmalarni faqat admin panelda ro'yxatdan o'tgan admin va sotuv menejerlari bosa oladi.</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>
