@@ -324,9 +324,19 @@ async def upload_media(file: UploadFile = File(...), kind: str | None = Form(def
     return media_out(m, validate_upload(k, len(data)))
 
 
-@router.get("/media/{mid}/file")
-async def media_file(mid: int, db: AsyncSession = Depends(get_db), _=Depends(current_user)):
+@router.get("/media/{mid}")
+async def media_info(mid: int, db: AsyncSession = Depends(get_db), _=Depends(current_user)):
     m = await db.get(Media, mid)
-    if not m or not os.path.exists(m.path):
+    if not m:
+        raise HTTPException(404, "Fayl topilmadi")
+    return media_out(m)
+
+
+@router.get("/media/{mid}/file")
+async def media_file(mid: int, db: AsyncSession = Depends(get_db)):
+    """Progrev media fayllari (marketing kontenti) — <img> da ko'rsatish uchun tokensiz.
+    Cheklar boshqa endpointda va faqat sotuv/super admin uchun."""
+    m = await db.get(Media, mid)
+    if not m or not os.path.isfile(m.path):
         raise HTTPException(404, "Fayl topilmadi")
     return FileResponse(m.path, media_type=m.mime or None, filename=m.filename)

@@ -38,7 +38,7 @@ async def payments(funnel_id: int, status: str = "pending", db: AsyncSession = D
 @router.get("/payments/{pid}/file")
 async def payment_file(pid: int, db: AsyncSession = Depends(get_db), _=Depends(SALES)):
     p = await db.get(Payment, pid)
-    if not p or not os.path.exists(p.file_path):
+    if not p or not os.path.isfile(p.file_path):
         raise HTTPException(404, "Fayl topilmadi")
     return FileResponse(p.file_path, media_type=p.file_mime)
 

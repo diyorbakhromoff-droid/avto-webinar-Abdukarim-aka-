@@ -83,6 +83,14 @@ async def update_user(uid: int, body: UserIn, db: AsyncSession = Depends(get_db)
     return user_out(u)
 
 
+@router.get("/managers")
+async def managers(db: AsyncSession = Depends(get_db), _=Depends(current_user)):
+    """Lid biriktirish va filtrlar uchun: faol sotuv menejerlari va super adminlar."""
+    rows = (await db.execute(select(AdminUser).where(
+        AdminUser.active.is_(True), AdminUser.role.in_(("sales", "super_admin"))).order_by(AdminUser.name))).scalars()
+    return [{"id": u.id, "name": u.name} for u in rows]
+
+
 class GlobalSettingsIn(BaseModel):
     admin_group_chat_id: int | None = None
 

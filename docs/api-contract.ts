@@ -205,7 +205,10 @@ export interface SimulationRow {
   reason: string | null;   // "vaqt yetmaydi", "tungi tinchlik: 08:00 ga surildi", "segmentga bog'liq"
 }
 
+// GET  /api/admin/managers -> { id: number; name: string }[]   (barcha rollar: biriktirish va filtrlar uchun)
 // POST /api/admin/media (multipart: file) -> MediaInfo
+// GET  /api/admin/media/{id} -> MediaInfo
+// GET  /api/admin/media/{id}/file — tokensiz (progrev kontenti); cheklar /payments/{id}/file da, token bilan
 export interface MediaInfo { id: number; kind: 'photo' | 'video' | 'video_note' | 'voice' | 'audio' | 'document'; filename: string; size: number; url: string; warnings: string[] }
 
 // ── Izohlar (asl efir) ──
