@@ -1,12 +1,12 @@
 # Mini App va admin panelni yig'ib, Caddy bilan beradi (HTTPS — Let's Encrypt avtomatik)
-FROM node:22-alpine AS miniapp
+FROM node:22-slim AS miniapp
 WORKDIR /src
 COPY miniapp/package.json miniapp/package-lock.json ./
 RUN npm ci
 COPY miniapp/ ./
 RUN npm run build
 
-FROM node:22-alpine AS admin
+FROM node:22-slim AS admin
 WORKDIR /src
 COPY admin/package.json admin/package-lock.json ./
 RUN npm ci
