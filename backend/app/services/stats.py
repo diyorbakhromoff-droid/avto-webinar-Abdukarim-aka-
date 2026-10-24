@@ -2,7 +2,7 @@
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 
-from sqlalchemy import Select, and_, exists, func, select, text
+from sqlalchemy import Select, and_, exists, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import (
@@ -140,26 +140,62 @@ def metrics(n: dict) -> list[dict]:
     ]
 
 
+async def _positions(db: AsyncSession, flt: StatsFilter, f: Funnel, day: int) -> list[tuple[int, int]]:
+    """Har bir efirga kirish uchun (kirgan soniya, eng uzoq yetgan soniya). Pauza/o'tkazish yo'q —
+    lid shu oraliqni ko'rgan."""
+    start = local_to_utc(flt.date_from, datetime.min.time()) if flt.date_from else None
+    end = local_to_utc(flt.date_to + timedelta(days=1), datetime.min.time()) if flt.date_to else None
+    q = (select(Attendance.join_position_sec, Attendance.max_position_sec)
+         .join(Lead, Lead.id == Attendance.lead_id)
+         .where(Lead.funnel_id == f.id, Attendance.day == day, Attendance.lead_id.in_(lead_ids(flt))))
+    if start:
+        q = q.where(Attendance.joined_at >= start)
+    if end:
+        q = q.where(Attendance.joined_at < end)
+    return [(j, m) for j, m in (await db.execute(q)).all()]
+
+
+def _watching_at(rows: list[tuple[int, int]], sec: int) -> int:
+    return sum(1 for j, m in rows if j <= sec <= m)
+
+
 async def retention(db: AsyncSession, flt: StatsFilter, f: Funnel) -> list[dict]:
-    """Har daqiqada qolgan tomoshabinlar ulushi: xom heartbeat (30 kun) + eski kunlar agregatsiyasi."""
+    """Har daqiqada efirni ko'rib turganlar ulushi (efirga kirganlarga nisbatan)."""
     out = []
-    start = local_to_utc(flt.date_from, datetime.min.time()) if flt.date_from else now_utc() - timedelta(days=30)
-    end = local_to_utc(flt.date_to + timedelta(days=1), datetime.min.time()) if flt.date_to else now_utc()
     for day, dur, offer in ((1, f.day1_duration_sec, f.day1_soft_offer_sec), (2, f.day2_duration_sec, f.day2_offer_sec)):
-        joined = await _count(db, select(func.count()).select_from(Attendance).join(
-            Lead, Lead.id == Attendance.lead_id).where(
-            Lead.funnel_id == f.id, Attendance.day == day, Attendance.joined_at >= start,
-            Attendance.joined_at < end, Attendance.lead_id.in_(lead_ids(flt))))
-        rows = (await db.execute(text("""
-            SELECT position_sec / 60 AS minute, count(DISTINCT attendance_id)
-            FROM heartbeats WHERE funnel_id = :f AND day = :d AND created_at >= :s AND created_at < :e
-            GROUP BY 1 ORDER BY 1"""), {"f": f.id, "d": day, "s": start, "e": end})).all()
-        by_min = {int(m): c for m, c in rows}
-        points = [{"minute": m, "share": round(min(by_min.get(m, 0) / joined, 1), 4) if joined else 0}
+        rows = await _positions(db, flt, f, day)
+        joined = len(rows)
+        points = [{"minute": m, "share": round(_watching_at(rows, m * 60) / joined, 4) if joined else 0}
                   for m in range(0, max(dur // 60, 1) + 1)]
         out.append({"day": day, "duration_min": dur // 60, "offer_min": offer // 60 if offer else None,
                     "points": points})
     return out
+
+
+async def watch_curve(db: AsyncSession, flt: StatsFilter, f: Funnel, day: int, step: int = 5) -> dict:
+    """Videoning har `step` daqiqasida nechta odam ko'rib turgani va qayerda ko'rish kamaygani."""
+    dur = f.day1_duration_sec if day == 1 else f.day2_duration_sec
+    offer = f.day1_soft_offer_sec if day == 1 else f.day2_offer_sec
+    rows = await _positions(db, flt, f, day)
+    joined = len(rows)
+    buckets, prev = [], None
+    for m in list(range(0, dur // 60 + 1, step)) or [0]:
+        viewers = _watching_at(rows, m * 60)
+        share = round(viewers / joined, 4) if joined else 0
+        # shu oraliqda chiqib ketganlar: oldingi nuqtada ko'rib, keyingisiga yetmaganlar
+        left = sum(1 for j, mx in rows if j <= (m - step) * 60 <= mx < m * 60) if m else 0
+        buckets.append({"minute": m, "viewers": viewers, "share": share,
+                        "drop": round(prev - share, 4) if prev is not None else 0, "left": left})
+        prev = share
+    top = sorted((b for b in buckets[1:] if b["left"] > 0), key=lambda b: b["left"], reverse=True)[:3]
+    avg = round(sum(max(mx - j, 0) for j, mx in rows) / joined / 60) if joined else 0
+    return {
+        "day": day, "step": step, "duration_min": dur // 60, "offer_min": offer // 60 if offer else None,
+        "joined": joined, "avg_watch_min": avg,
+        "full": sum(1 for _, mx in rows if dur and mx >= 0.95 * dur),
+        "buckets": buckets,
+        "top_drops": [{"from_minute": b["minute"] - step, "to_minute": b["minute"], "left": b["left"]} for b in top],
+    }
 
 
 STEP_ROWS = [

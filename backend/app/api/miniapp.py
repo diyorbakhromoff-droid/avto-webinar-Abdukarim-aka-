@@ -15,6 +15,7 @@ from app.domain.slots import SlotConfig, can_change_day1
 from app.models import Attendance, Funnel, Heartbeat, Lead, LeadSession, LiveComment, Question, Tariff
 from app.security.initdata import InitDataError, validate
 from app.services.leads import active_session, event, lead_for_tg, set_step
+from app.services.sessions import mark_returned
 from app.services.payments import price_for, special_active
 from app.services.tg import get_bot
 from app.services.video import hls_url
@@ -112,6 +113,7 @@ async def state(lead: Lead = Depends(webapp_lead), db: AsyncSession = Depends(ge
             "duration_sec": f.day1_duration_sec if day == 1 else f.day2_duration_sec,
             "hls_url": hls_url(f.day1_video_id if day == 1 else f.day2_video_id),
             "comments": [{"t": c.t, "author": c.author, "text": c.text} for c in comments],
+            "my_messages": await _my_messages(db, lead, s.id, day),
         }
         if day == 2:
             resp["offer"] = await _offer(db, lead, f, f.day2_offer_sec, False, now)
@@ -166,6 +168,7 @@ async def heartbeat(body: HeartbeatIn, lead: Lead = Depends(webapp_lead), db: As
         gap = (now - a.last_heartbeat_at).total_seconds() if a.last_heartbeat_at else 0
         if 0 < gap <= HEARTBEAT_MAX_GAP:
             a.watched_sec = min(a.watched_sec + int(gap), duration)
+        await mark_returned(db, a)
         a.last_heartbeat_at = now
         a.last_position_sec = position
         a.max_position_sec = max(a.max_position_sec, position)
@@ -186,13 +189,32 @@ async def heartbeat(body: HeartbeatIn, lead: Lead = Depends(webapp_lead), db: As
     return {"ok": True, "server_time": iso(now)}
 
 
+async def _my_messages(db: AsyncSession, lead: Lead, session_id: int, day: int) -> list[dict]:
+    """Lidning shu efirdagi o'z xabarlari — faqat o'ziga ko'rinadi."""
+    rows = (await db.execute(select(Question).where(
+        Question.lead_id == lead.id, Question.session_id == session_id, Question.day == day,
+        Question.source == "miniapp").order_by(Question.id))).scalars().all()
+    return [{"id": q.id, "t": q.video_sec or 0, "text": q.text, "answer": q.answer} for q in rows]
+
+
 class QuestionIn(BaseModel):
     text: str = Field(min_length=1, max_length=2000)
 
 
 @router.post("/question")
 async def question(body: QuestionIn, lead: Lead = Depends(webapp_lead), db: AsyncSession = Depends(get_db)):
-    db.add(Question(lead_id=lead.id, text=body.text.strip(), source="miniapp"))
+    """Efir chati: efir davomida yozilgan fikr va savollar (videoning qaysi daqiqasida yozilgani bilan)."""
+    day = video_sec = session_id = None
+    s = await active_session(db, lead.id)
+    if s:
+        f = await db.get(Funnel, lead.funnel_id)
+        now = now_utc()
+        res = compute_state(access_input(s, f, await _attendance(db, s, 1), await _attendance(db, s, 2), now))
+        session_id = s.id
+        if res.state in ("live", "closed") and res.started_at:
+            day, video_sec = res.day, int((now - res.started_at).total_seconds())
+    db.add(Question(lead_id=lead.id, text=body.text.strip(), source="miniapp", session_id=session_id, day=day,
+                    video_sec=video_sec))
     event(db, lead, "question")
     await db.commit()
     return {"ok": True}

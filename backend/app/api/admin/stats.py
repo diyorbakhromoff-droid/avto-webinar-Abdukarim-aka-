@@ -47,7 +47,11 @@ async def dashboard(funnel_id: int, period: str = "today", db: AsyncSession = De
     pending = (await db.execute(select(func.count()).select_from(Payment).join(Lead, Lead.id == Payment.lead_id)
                                 .where(Lead.funnel_id == funnel_id, Payment.status == "pending"))).scalar()
     unanswered = (await db.execute(select(func.count()).select_from(Question).join(Lead, Lead.id == Question.lead_id)
-                                   .where(Lead.funnel_id == funnel_id, Question.answer.is_(None)))).scalar()
+                                   .where(Lead.funnel_id == funnel_id, Question.answer.is_(None),
+                                          Question.source == "bot"))).scalar()
+    chat_new = (await db.execute(select(func.count()).select_from(Question).join(Lead, Lead.id == Question.lead_id)
+                                 .where(Lead.funnel_id == funnel_id, Question.answer.is_(None),
+                                        Question.source == "miniapp"))).scalar()
     failed = (await db.execute(select(func.count()).select_from(ScheduledMessage)
                                .join(Lead, Lead.id == ScheduledMessage.lead_id)
                                .where(Lead.funnel_id == funnel_id, ScheduledMessage.status == "failed",
@@ -58,7 +62,8 @@ async def dashboard(funnel_id: int, period: str = "today", db: AsyncSession = De
                  "deposit_paid": n["deposit"], "cost_per_sale": cps},
         "funnel": funnel,
         "upcoming": [{**u, "at": iso(u["at"])} for u in await st.upcoming(db, funnel_id)],
-        "pending_receipts": pending, "unanswered_questions": unanswered, "failed_messages": failed,
+        "pending_receipts": pending, "unanswered_questions": unanswered, "unanswered_chat": chat_new,
+        "failed_messages": failed,
     }
 
 
@@ -77,6 +82,16 @@ async def stats(flt: st.StatsFilter = Depends(flt_dep), db: AsyncSession = Depen
         "steps": await st.steps(db, flt, f),
         "live_compare": await st.live_compare(db, f.id, n),
     }
+
+
+@router.get("/funnels/{fid}/watch-stats")
+async def watch_stats(fid: int, day: int = 1, step: int = 5, date_from: date | None = None,
+                      date_to: date | None = None, source: str | None = None, slot: str | None = None,
+                      db: AsyncSession = Depends(get_db), _=Depends(ANY)):
+    """Videoning har 5 daqiqasida nechta odam ko'rib turibdi va qayerda ko'rish kamayadi."""
+    f = await funnel_or_404(db, fid)
+    flt = st.StatsFilter(fid, date_from, date_to, source or None, slot or None)
+    return await st.watch_curve(db, flt, f, 2 if day == 2 else 1, max(1, min(step, 30)))
 
 
 @router.get("/stats/export.xlsx")

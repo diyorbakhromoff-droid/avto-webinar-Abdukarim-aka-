@@ -6,8 +6,10 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domain.planning import ChainItem, QuietHours, plan_stuck
-from app.domain.segments import LeadSnapshot
-from app.models import ChainMessage, Funnel, Lead, LeadEvent, LeadSession, LeadStep, Payment, ScheduledMessage
+from app.domain.segments import DayWatch, LeadSnapshot
+from app.models import (
+    Attendance, ChainMessage, Funnel, Lead, LeadEvent, LeadSession, LeadStep, Payment, ScheduledMessage,
+)
 from app.timeutil import now_utc, parse_hhmm
 
 STEP_LABELS = {
@@ -42,6 +44,7 @@ EVENT_TITLES = {
     "session_changed": "Vaqtni o'zgartirdi",
     "rescheduled": "Qayta vaqt tanladi",
     "joined": "Efirga kirdi",
+    "left_live": "Efirdan chiqib ketdi",
     "day_result": "Kun yakuni",
     "reached_offer": "Oferta momentiga yetdi",
     "clicked_buy": "«Kursga yozilish» tugmasini bosdi",
@@ -78,6 +81,14 @@ async def snapshot(db: AsyncSession, lead: Lead, session: LeadSession | None = N
     pending = (await db.execute(
         select(Payment.id).where(Payment.lead_id == lead.id, Payment.status == "pending").limit(1)
     )).first() is not None
+    watch: dict[int, DayWatch] = {}
+    if session:
+        f = await db.get(Funnel, lead.funnel_id)
+        rows = (await db.execute(select(Attendance).where(Attendance.session_id == session.id))).scalars().all()
+        for day, day_at, dur in ((1, session.day1_at, f.day1_duration_sec), (2, session.day2_at, f.day2_duration_sec)):
+            a = next((r for r in rows if r.day == day and r.day_at == day_at), None)
+            watch[day] = DayWatch(joined=a is not None, max_position_sec=a.max_position_sec if a else 0,
+                                  duration_sec=dur)
     return LeadSnapshot(
         payment_status=lead.payment_status,
         has_pending_receipt=pending,
@@ -87,6 +98,7 @@ async def snapshot(db: AsyncSession, lead: Lead, session: LeadSession | None = N
         blocked=lead.blocked,
         unsubscribed=lead.unsubscribed,
         cold=lead.cold,
+        watch=watch,
     )
 
 

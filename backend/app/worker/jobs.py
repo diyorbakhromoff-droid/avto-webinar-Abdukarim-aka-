@@ -13,7 +13,7 @@ from app.domain.segments import broadcast_allowed
 from app.models import Broadcast, ContactLog, Heartbeat, KeyValue, Lead, ScheduledMessage
 from app.services.leads import snapshot
 from app.services.payments import notify_manager
-from app.services.sessions import evaluate_finished_days
+from app.services.sessions import detect_left_live, evaluate_finished_days
 from app.timeutil import TZ, now_utc, to_local
 
 log = logging.getLogger(__name__)
@@ -25,6 +25,13 @@ async def evaluate_days() -> None:
         n = await evaluate_finished_days(db)
         if n:
             log.info("Baholangan kunlar: %s", n)
+
+
+async def left_live() -> None:
+    async with SessionLocal() as db:
+        n = await detect_left_live(db)
+        if n:
+            log.info("Efirdan chiqib ketganlar: %s", n)
 
 
 async def expand_broadcasts() -> None:

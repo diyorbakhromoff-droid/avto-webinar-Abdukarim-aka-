@@ -103,12 +103,12 @@ def buttons(method) -> list[str]:
 
 async def test_full_bot_flow(db, tg):
     bot, dp, s = tg
-    f = await make_funnel(db, card_number="8600 1111 2222 3333", card_holder="Ism Familiya")
+    await make_funnel(db, card_number="8600 1111 2222 3333", card_holder="Ism Familiya")
     db.add(AdminUser(login="nodira", name="Nodira", role="sales", password_hash="x", tg_user_id=ADMIN.id))
     db.add(KeyValue(key="admin_group_chat_id", value=GROUP.id))
     await db.commit()
 
-    await dp.feed_update(bot, msg(USER, text="/start arab_ig_reels3"))
+    await dp.feed_update(bot, msg(USER, text="/start notiqlik_ig_reels3"))
     lead = (await db.execute(select(Lead).where(Lead.tg_user_id == USER.id))).scalar_one()
     assert lead.source == "ig_reels3" and lead.step == "started"
     assert any("telefon" in (m.text or "").lower() for m in s.sent())
@@ -163,7 +163,7 @@ async def test_full_bot_flow(db, tg):
 async def test_pdf_receipt_and_unsubscribe(db, tg):
     bot, dp, s = tg
     await make_funnel(db)
-    await dp.feed_update(bot, msg(USER, text="/start arab"))
+    await dp.feed_update(bot, msg(USER, text="/start notiqlik"))
     await dp.feed_update(bot, msg(USER, text="90 123 45 67"))
     lead = (await db.execute(select(Lead).where(Lead.tg_user_id == USER.id))).scalar_one()
     assert lead.phone == "+998 90 123 45 67"

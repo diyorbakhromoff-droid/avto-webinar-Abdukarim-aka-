@@ -1,4 +1,6 @@
 """Progrev zanjiri: CRUD, test yuborish, o'zgarishlar tarixi, "lid sifatida sinash"."""
+from datetime import timedelta
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select, text
@@ -9,7 +11,7 @@ from app.db import get_db
 from app.domain.honesty import honesty_warnings
 from app.domain.media_rules import validate_message
 from app.domain.planning import SessionTimes, plan_chain
-from app.domain.segments import SEGMENTS
+from app.domain.segments import MINUTE_SEGMENTS, SEGMENTS, WATCH_SEGMENTS
 from app.domain.slots import day2_for
 from app.models import AdminUser, ChainHistory, ChainMessage, Funnel, Media, ScheduledMessage
 from app.security.auth import CONTENT
@@ -21,11 +23,13 @@ from app.timeutil import fmt_datetime, now_utc
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
-TRIGGERS = {"after_registration", "before_day", "at_day_start", "after_day_end", "on_button", "stuck"}
+TRIGGERS = {"after_registration", "before_day", "at_day_start", "after_day_end", "before_deadline", "left_live",
+            "on_button", "stuck"}
+DAY_TRIGGERS = {"before_day", "at_day_start", "after_day_end", "left_live"}
 KINDS = {"text", "photo", "video", "video_note", "voice", "audio", "document", "album"}
 STUCK_STEPS = {"no_phone", "no_session", "no_receipt", "receipt_rejected"}
 EDITABLE = ["title", "kind", "text", "media_ids", "buttons", "trigger_type", "trigger_day", "offset_minutes",
-            "stuck_step", "button_key", "segment", "required", "status", "sort"]
+            "stuck_step", "button_key", "segment", "segment_day", "segment_minute", "required", "status", "sort"]
 TIMING = {"trigger_type", "trigger_day", "offset_minutes", "required", "status", "stuck_step"}
 
 
@@ -41,6 +45,8 @@ class ChainIn(BaseModel):
     stuck_step: str | None = None
     button_key: str | None = None
     segment: str = "all"
+    segment_day: int | None = None
+    segment_minute: int | None = None
     required: bool = False
     status: str = "active"
     sort: int = 0
@@ -52,7 +58,7 @@ def validate(body: ChainIn) -> None:
         errors.append("Noto'g'ri xabar turi")
     if body.trigger_type not in TRIGGERS:
         errors.append("Noto'g'ri trigger")
-    if body.trigger_type in ("before_day", "at_day_start", "after_day_end") and body.trigger_day not in (1, 2):
+    if body.trigger_type in DAY_TRIGGERS and body.trigger_day not in (1, 2):
         errors.append("Kun (1 yoki 2) tanlanmagan")
     if body.trigger_type == "stuck" and body.stuck_step not in STUCK_STEPS:
         errors.append("To'xtab qolish qadami tanlanmagan")
@@ -60,6 +66,10 @@ def validate(body: ChainIn) -> None:
         errors.append("Tugma kaliti kiritilmagan")
     if body.segment not in SEGMENTS:
         errors.append("Noto'g'ri segment")
+    if body.segment in WATCH_SEGMENTS and (body.segment_day or body.trigger_day) not in (1, 2):
+        errors.append("Qaysi kun videosi ekanini tanlang")
+    if body.segment in MINUTE_SEGMENTS and not (body.segment_minute and body.segment_minute > 0):
+        errors.append("Videoning daqiqasini kiriting")
     if body.offset_minutes < 0:
         errors.append("Vaqt manfiy bo'lishi mumkin emas")
     if body.status not in ("active", "draft"):
@@ -206,8 +216,16 @@ class SimulateIn(BaseModel):
 TRIGGER_LABEL = {
     "after_registration": "ro'yxatdan {o} keyin", "before_day": "{d}-kundan {o} oldin",
     "at_day_start": "{d}-kun boshlanishida +{o}", "after_day_end": "{d}-kun tugagach +{o}",
+    "before_deadline": "deadline tugashidan {o} oldin", "left_live": "{d}-kun efiridan chiqib ketgach {o}",
     "on_button": "tugma bosilganda", "stuck": "to'xtab qolganda ({o})",
 }
+
+
+def segment_label(m: ChainMessage) -> str:
+    label = SEGMENTS[m.segment]
+    if m.segment in WATCH_SEGMENTS:
+        label = f"{m.segment_day or m.trigger_day or 1}-kun: " + label.replace("X", str(m.segment_minute or "X"))
+    return label
 
 
 def fmt_offset(minutes: int) -> str:
@@ -228,13 +246,15 @@ async def simulate(fid: int, body: SimulateIn, db: AsyncSession = Depends(get_db
                                                         ChainMessage.status == "active")
                              .order_by(ChainMessage.sort, ChainMessage.id))).scalars().all()
     by_id = {m.id: m for m in msgs}
-    s = SessionTimes(reg, day1, day2_for(day1), f.day1_duration_sec, f.day2_duration_sec)
+    d2 = day2_for(day1)
+    deadline = d2 + timedelta(seconds=f.day2_duration_sec) + timedelta(hours=f.deadline_hours)
+    s = SessionTimes(reg, day1, d2, f.day1_duration_sec, f.day2_duration_sec, deadline)
     rows = []
     for p in plan_chain([chain_item(m) for m in msgs], s, reg, quiet_of(f)):
         m = by_id[p.item.id]
         reason = p.reason
         if p.send_at and m.segment != "all":
-            reason = ((reason + "; ") if reason else "") + f"faqat: {SEGMENTS[m.segment]}"
+            reason = ((reason + "; ") if reason else "") + f"faqat: {segment_label(m)}"
         rows.append({
             "message_id": m.id, "title": m.title,
             "trigger": TRIGGER_LABEL[m.trigger_type].format(d=m.trigger_day, o=fmt_offset(m.offset_minutes)),

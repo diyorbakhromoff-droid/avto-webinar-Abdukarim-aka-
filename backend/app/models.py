@@ -34,8 +34,8 @@ class Funnel(Base):
     speaker_title: Mapped[str] = mapped_column(String(300), default="")
     speaker_photo_url: Mapped[str | None] = mapped_column(String(500))
     logo_url: Mapped[str | None] = mapped_column(String(500))
-    theme_primary: Mapped[str] = mapped_column(String(16), default="#D4AF5A")
-    theme_background: Mapped[str] = mapped_column(String(16), default="#120F0B")
+    theme_primary: Mapped[str] = mapped_column(String(16), default="#5B9BEF")
+    theme_background: Mapped[str] = mapped_column(String(16), default="#0E1726")
     bg_image_url: Mapped[str | None] = mapped_column(String(500))
     welcome_text: Mapped[str] = mapped_column(Text, default="")
     lead_magnet_media_id: Mapped[int | None] = mapped_column(ForeignKey("media.id", ondelete="SET NULL"))
@@ -189,6 +189,7 @@ class Attendance(Base):
     last_heartbeat_at: Mapped[datetime | None] = ts()
     last_position_sec: Mapped[int] = mapped_column(Integer, default=0)
     reached_offer: Mapped[bool] = mapped_column(Boolean, default=False)
+    left_at: Mapped[datetime | None] = ts()  # efir davomida chiqib ketgan payti (qaytsa — None)
 
 
 class Heartbeat(Base):
@@ -248,6 +249,8 @@ class ChainMessage(Base):
     stuck_step: Mapped[str | None] = mapped_column(String(24))
     button_key: Mapped[str | None] = mapped_column(String(64))
     segment: Mapped[str] = mapped_column(String(24), default="all")
+    segment_day: Mapped[int | None] = mapped_column(Integer)      # ko'rish segmentlari: qaysi kun videosi
+    segment_minute: Mapped[int | None] = mapped_column(Integer)   # ko'rish segmentlari: X-daqiqa
     required: Mapped[bool] = mapped_column(Boolean, default=False)
     status: Mapped[str] = mapped_column(String(10), default="active")
     sort: Mapped[int] = mapped_column(Integer, default=0)
@@ -340,7 +343,10 @@ class Question(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     lead_id: Mapped[int] = mapped_column(ForeignKey("leads.id", ondelete="CASCADE"), index=True)
     text: Mapped[str] = mapped_column(Text)
-    source: Mapped[str] = mapped_column(String(10))
+    source: Mapped[str] = mapped_column(String(10))  # miniapp — efir chati, bot — keyingi savollar
+    session_id: Mapped[int | None] = mapped_column(ForeignKey("lead_sessions.id", ondelete="SET NULL"))
+    day: Mapped[int | None] = mapped_column(Integer)
+    video_sec: Mapped[int | None] = mapped_column(Integer)  # yozilgan paytdagi video soniyasi
     created_at: Mapped[datetime] = ts(False, True)
     answer: Mapped[str | None] = mapped_column(Text)
     answered_by: Mapped[str | None] = mapped_column(String(100))

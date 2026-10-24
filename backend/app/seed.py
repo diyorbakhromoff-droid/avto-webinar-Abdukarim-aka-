@@ -65,6 +65,12 @@ DEFAULT_CHAIN = [
      "{ism}, siz hali efir vaqtini tanlamadingiz. Qulay vaqtni tanlang:", None, "no_session"),
     ("Vaqt tanlash: 24 soat", "stuck", None, 1440, "all", True, [[{"type": "reschedule", "text": "Vaqt tanlash"}]],
      "{ism}, webinar har kuni bo'ladi — o'zingizga qulay vaqtni tanlang.", None, "no_session"),
+    ("1-kun: efirdan chiqib ketganlar", "left_live", 1, 3, "all", True, [[{"type": "webapp", "text": "Efirga qaytish"}]],
+     "{ism}, efir hali davom etyapti — eng muhim qismi oldinda. Qaytib kiring:", None, None),
+    ("2-kun: efirdan chiqib ketganlar", "left_live", 2, 3, "all", True, [[{"type": "webapp", "text": "Efirga qaytish"}]],
+     "{ism}, efirdan chiqib ketdingiz. Kurs haqidagi taklif hali oldinda — qaytib kiring:", None, None),
+    ("Deadline: 3 soat qoldi", "before_deadline", None, 180, "not_paid", True, PAY,
+     "{ism}, maxsus narx tugashiga 3 soat qoldi ({deadline} gacha). Keyin oddiy narxga o'tadi.", None, None),
     ("Chek yuborilmadi", "stuck", None, 60, "all", True, PAY,
      "{ism}, to'lovni yakunlamadingiz. Rekvizitlarni qayta ko'rish uchun tugmani bosing va chekni yuboring.",
      None, "no_receipt"),
@@ -81,8 +87,8 @@ async def seed() -> None:
                              password_hash=hash_password(s.initial_admin_password)))
             log.info("Super admin yaratildi: %s", s.initial_admin_login)
         if not (await db.execute(select(func.count()).select_from(Funnel))).scalar():
-            f = Funnel(slug="arab", name="Arab tili", course_title="Arab tili kursi",
-                       topic="Arab tilida o'qishni noldan boshlash", offer_course_title="Arab tili kursi",
+            f = Funnel(slug="notiqlik", name="Notiqlik", course_title="Notiqlik kursi",
+                       topic="Ishonch bilan gapirish", offer_course_title="Notiqlik kursi",
                        welcome_text="Assalomu alaykum, {ism}! 2 kunlik bepul webinarga xush kelibsiz.")
             db.add(f)
             await db.flush()

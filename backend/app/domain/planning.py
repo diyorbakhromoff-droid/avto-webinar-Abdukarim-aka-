@@ -23,7 +23,8 @@ DAY_START_LEAD = timedelta(minutes=1)
 class ChainItem:
     id: int
     title: str
-    trigger_type: str          # after_registration | before_day | at_day_start | after_day_end | on_button | stuck
+    trigger_type: str          # after_registration | before_day | at_day_start | after_day_end | before_deadline
+                               # | left_live | on_button | stuck
     trigger_day: int | None
     offset_minutes: int
     required: bool
@@ -37,6 +38,7 @@ class SessionTimes:
     day2_at: datetime
     day1_duration_sec: int
     day2_duration_sec: int
+    deadline_at: datetime | None = None   # lidning shaxsiy deadline'i
 
     def day_start(self, day: int) -> datetime:
         return self.day1_at if day == 1 else self.day2_at
@@ -61,7 +63,8 @@ class PlannedMessage:
     session_bound: bool = True
 
 
-SESSION_TRIGGERS = {"before_day", "at_day_start", "after_day_end"}
+SESSION_TRIGGERS = {"before_day", "at_day_start", "after_day_end", "before_deadline"}
+EVENT_TRIGGERS = {"on_button", "stuck", "left_live"}
 
 
 def plan_chain(items: list[ChainItem], s: SessionTimes, now: datetime,
@@ -105,7 +108,7 @@ def plan_chain(items: list[ChainItem], s: SessionTimes, now: datetime,
     for item in items:
         if item.trigger_type in SESSION_TRIGGERS:
             out.append(_plan_session_item(item, s, now, quiet))
-        elif item.trigger_type in ("on_button", "stuck"):
+        elif item.trigger_type in EVENT_TRIGGERS:
             out.append(PlannedMessage(item, None, "event", "voqea bo'yicha yuboriladi", session_bound=False))
 
     order = {i.id: n for n, i in enumerate(items)}
@@ -116,6 +119,19 @@ def plan_chain(items: list[ChainItem], s: SessionTimes, now: datetime,
 def _plan_session_item(item: ChainItem, s: SessionTimes, now: datetime, quiet: QuietHours) -> PlannedMessage:
     day = item.trigger_day or 1
     offset = timedelta(minutes=item.offset_minutes)
+    if item.trigger_type == "before_deadline":
+        if s.deadline_at is None:
+            return PlannedMessage(item, None, "skipped", "deadline belgilanmagan")
+        t = s.deadline_at - offset
+        if t < now:
+            return PlannedMessage(item, None, "skipped", "vaqti o'tib ketgan")
+        if in_quiet_hours(t, quiet.start, quiet.end):
+            shifted = shift_out_of_quiet(t, quiet.start, quiet.end)
+            if shifted >= s.deadline_at:
+                # tunda tugaydigan deadline — eslatmani tinchlik boshlanishidan oldinroq yuboramiz
+                return PlannedMessage(item, None, "skipped", "tungi tinchlikka tushdi")
+            return PlannedMessage(item, shifted, "quiet_shifted", "tungi tinchlik: surildi")
+        return PlannedMessage(item, t, "scheduled")
     if item.trigger_type == "before_day":
         anchor = s.day_start(day)
         t = anchor - offset

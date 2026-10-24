@@ -111,7 +111,7 @@ async def send_one(bot: Bot, limiter: RateLimiter, sid: int) -> None:
             if session and _results_pending(msg.segment, session, await db.get(Funnel, lead.funnel_id)):
                 await _postpone(db, sm, 30, "kun natijasi kutilmoqda")
                 return
-            ok, why = chain_allowed(msg.segment, snap)
+            ok, why = chain_allowed(msg.segment, snap, msg.segment_day or msg.trigger_day, msg.segment_minute)
             if ok and msg.system_key == "late_reminder" and session:
                 day_at = session.day1_at if (msg.trigger_day or 1) == 1 else session.day2_at
                 joined = (await db.execute(select(Attendance.id).where(

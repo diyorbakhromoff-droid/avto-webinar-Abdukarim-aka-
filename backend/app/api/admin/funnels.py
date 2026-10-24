@@ -91,7 +91,8 @@ async def copy_funnel(fid: int, body: FunnelIn, db: AsyncSession = Depends(get_d
     for m in (await db.execute(select(ChainMessage).where(ChainMessage.funnel_id == src.id))).scalars():
         db.add(ChainMessage(funnel_id=f.id, **{c: getattr(m, c) for c in (
             "title", "kind", "text", "media_ids", "buttons", "trigger_type", "trigger_day", "offset_minutes",
-            "stuck_step", "button_key", "segment", "required", "status", "sort", "system_key")},
+            "stuck_step", "button_key", "segment", "segment_day", "segment_minute", "required", "status", "sort",
+            "system_key")},
             updated_by=me.name))
     for c in (await db.execute(select(LiveComment).where(LiveComment.funnel_id == src.id))).scalars():
         db.add(LiveComment(funnel_id=f.id, day=c.day, t=c.t, author=c.author, text=c.text))

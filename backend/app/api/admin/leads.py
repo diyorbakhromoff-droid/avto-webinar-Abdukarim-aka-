@@ -19,7 +19,8 @@ from app.models import (
 )
 from app.security.auth import SALES
 from app.services import payments as pay
-from app.services.leads import EVENT_TITLES, STEP_LABELS, event
+from app.services.leads import EVENT_TITLES, STEP_LABELS, active_session, event
+from app.services.sessions import plan_for_session
 from app.services.tg import get_bot
 from app.timeutil import fmt_datetime, local_to_utc, now_utc
 
@@ -208,6 +209,8 @@ def event_details(e: LeadEvent) -> str:
         case "deadline_changed":
             at = parse_iso(d.get("deadline_at"))
             return f"yangi: {fmt_datetime(at)}" if at else ""
+        case "left_live":
+            return f"{d.get('day')}-kun, {d.get('minute', 0)}-daqiqada"
         case "clicked_buy":
             return "Mini App" if d.get("source") == "miniapp" else "bot"
     return ""
@@ -331,6 +334,10 @@ async def deadline(lid: int, body: DeadlineIn, db: AsyncSession = Depends(get_db
         raise HTTPException(400, "Sana noto'g'ri")
     lead.deadline_at = at
     event(db, lead, "deadline_changed", deadline_at=iso(at), by=me.name)
+    # "deadline tugashidan X oldin" xabarlari yangi muddatga ko'chadi
+    s = await active_session(db, lead.id)
+    if s:
+        await plan_for_session(db, lead, s, await db.get(Funnel, lead.funnel_id))
     audit(db, me.name, "deadline_changed", f"lid #{lid}: {fmt_datetime(at)}")
     await db.commit()
     return {"ok": True}

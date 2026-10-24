@@ -1,10 +1,12 @@
 """To'lovlar navbati, savollar, ommaviy xabarlar."""
 import os
+from datetime import date as date_
+from datetime import time, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.admin.leads import payment_out
@@ -12,12 +14,12 @@ from app.api.common import audit, funnel_or_404, iso, parse_iso
 from app.bot import texts
 from app.db import get_db
 from app.domain.segments import SEGMENTS
-from app.models import AdminUser, Broadcast, Lead, Media, Payment, Question, Tariff
-from app.security.auth import CONTENT, SALES
+from app.models import AdminUser, Broadcast, Lead, LeadSession, Media, Payment, Question, Tariff
+from app.security.auth import ANY, CONTENT, SALES
 from app.services import payments as pay
 from app.services.render import Payload, keyboard, send_payload
 from app.services.tg import get_bot
-from app.timeutil import now_utc
+from app.timeutil import local_to_utc, now_utc
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
@@ -90,7 +92,7 @@ def question_out(q: Question, lead: Lead) -> dict:
 @router.get("/questions")
 async def questions(funnel_id: int, answered: bool = False, db: AsyncSession = Depends(get_db), _=Depends(SALES)):
     q = (select(Question, Lead).join(Lead, Lead.id == Question.lead_id)
-         .where(Lead.funnel_id == funnel_id,
+         .where(Lead.funnel_id == funnel_id, Question.source == "bot",
                 Question.answer.is_not(None) if answered else Question.answer.is_(None))
          .order_by(Question.created_at.desc()).limit(500))
     return [question_out(qq, lead) for qq, lead in (await db.execute(q)).all()]
@@ -111,6 +113,61 @@ async def answer(qid: int, body: AnswerIn, db: AsyncSession = Depends(get_db), m
     q.answer, q.answered_by, q.answered_at = body.text.strip(), me.name, now_utc()
     await db.commit()
     return question_out(q, lead)
+
+
+# ── efir chati: efir davomida Mini App'da yozilgan fikr va savollar ──
+
+def chat_out(q: Question, lead: Lead, s: LeadSession | None, show_phone: bool) -> dict:
+    session_at = (s.day1_at if q.day == 1 else s.day2_at) if s and q.day else None
+    return {"id": q.id, "lead_id": lead.id, "lead_name": lead.first_name,
+            "lead_phone": lead.phone if show_phone else None, "text": q.text, "day": q.day,
+            "video_sec": q.video_sec, "session_at": iso(session_at), "created_at": iso(q.created_at),
+            "answer": q.answer, "answered_at": iso(q.answered_at), "answered_by": q.answered_by}
+
+
+@router.get("/chat")
+async def chat(funnel_id: int, date: date_ | None = None, day: int | None = None, status: str = "all",
+               db: AsyncSession = Depends(get_db), me: AdminUser = Depends(ANY)):
+    q = (select(Question, Lead, LeadSession).join(Lead, Lead.id == Question.lead_id)
+         .outerjoin(LeadSession, LeadSession.id == Question.session_id)
+         .where(Lead.funnel_id == funnel_id, Question.source == "miniapp"))
+    if day:
+        q = q.where(Question.day == day)
+    if status == "unanswered":
+        q = q.where(Question.answer.is_(None))
+    if date:
+        q = q.where(Question.created_at >= local_to_utc(date, time.min),
+                    Question.created_at < local_to_utc(date + timedelta(days=1), time.min))
+    rows = (await db.execute(q.order_by(Question.created_at.desc()).limit(1000))).all()
+    show_phone = me.role != "content"
+    return [chat_out(qq, lead, s, show_phone) for qq, lead, s in rows]
+
+
+@router.get("/chat/sessions")
+async def chat_sessions(funnel_id: int, db: AsyncSession = Depends(get_db), _=Depends(ANY)):
+    """Chat xabarlari bor efirlar: qaysi kun, qaysi vaqt, nechta xabar."""
+    at = case((Question.day == 2, LeadSession.day2_at), else_=LeadSession.day1_at)
+    rows = (await db.execute(
+        select(Question.day, at.label("at"), func.count(), func.count().filter(Question.answer.is_(None)))
+        .join(Lead, Lead.id == Question.lead_id).join(LeadSession, LeadSession.id == Question.session_id)
+        .where(Lead.funnel_id == funnel_id, Question.source == "miniapp", Question.day.is_not(None))
+        .group_by(Question.day, "at").order_by(at.desc()).limit(100))).all()
+    return [{"day": d, "at": iso(a), "count": n, "unanswered": u} for d, a, n, u in rows]
+
+
+@router.post("/chat/{qid}/reply")
+async def chat_reply(qid: int, body: AnswerIn, db: AsyncSession = Depends(get_db), me: AdminUser = Depends(ANY)):
+    q = await db.get(Question, qid)
+    if not q or q.source != "miniapp" or not body.text.strip():
+        raise HTTPException(400, "Javob matnini yozing")
+    lead = await db.get(Lead, q.lead_id)
+    text_ = texts.CHAT_ANSWER.format(question=q.text[:300], answer=body.text.strip())
+    if not await pay.safe_send(get_bot(), lead, text_):
+        raise HTTPException(400, "Lidga yuborib bo'lmadi (botni bloklagan bo'lishi mumkin)")
+    q.answer, q.answered_by, q.answered_at = body.text.strip(), me.name, now_utc()
+    await db.commit()
+    s = await db.get(LeadSession, q.session_id) if q.session_id else None
+    return chat_out(q, lead, s, me.role != "content")
 
 
 # ── ommaviy xabar ──

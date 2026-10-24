@@ -18,6 +18,7 @@ MENU_STOP = "Xabarlarni to'xtatish"
 ASK_QUESTION = "Savolingizni yozing — spikerning jamoasi javob beradi."
 QUESTION_OK = "Savolingiz qabul qilindi. Javob shu yerga keladi."
 ANSWER = "<b>Savolingizga javob:</b>\n\n{answer}"
+CHAT_ANSWER = "<b>Efirdagi savolingizga javob</b>\n\n<i>{question}</i>\n\n{answer}"
 
 STOPPED = ("Avtomatik xabarlar to'xtatildi. Efir va to'lov bo'yicha muhim xabarlar kelib turadi. "
            "Qayta yoqish uchun pastdagi tugmani bosing.")

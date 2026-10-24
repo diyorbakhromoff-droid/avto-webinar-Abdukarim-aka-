@@ -22,8 +22,9 @@ def tash(d: date, hh: int, mm: int = 0) -> datetime:
 
 
 async def make_funnel(db, **kw) -> Funnel:
-    f = Funnel(slug="arab", name="Arab tili", day1_duration_sec=74 * 60, day2_duration_sec=82 * 60,
-               day2_offer_sec=58 * 60, day1_video_id="v1", day2_video_id="v2", **kw)
+    fields = dict(slug="notiqlik", name="Notiqlik", day1_duration_sec=74 * 60, day2_duration_sec=82 * 60,
+                  day2_offer_sec=58 * 60, day1_video_id="v1", day2_video_id="v2")
+    f = Funnel(**{**fields, **kw})
     db.add(f)
     await db.flush()
     msgs = [

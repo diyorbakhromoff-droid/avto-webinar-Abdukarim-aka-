@@ -6,7 +6,7 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domain import slots
-from app.domain.planning import ChainItem, SessionTimes, plan_chain
+from app.domain.planning import EVENT_TRIGGERS, ChainItem, SessionTimes, plan_chain
 from app.models import Attendance, ChainMessage, Funnel, Lead, LeadSession, ScheduledMessage
 from app.services.leads import active_session, cancel_pending, event, quiet_of, set_step
 from app.timeutil import now_utc
@@ -22,7 +22,7 @@ def chain_item(m: ChainMessage) -> ChainItem:
 
 def session_times(lead: Lead, s: LeadSession, f: Funnel) -> SessionTimes:
     return SessionTimes(lead.phone_at or lead.created_at, s.day1_at, s.day2_at,
-                        f.day1_duration_sec, f.day2_duration_sec)
+                        f.day1_duration_sec, f.day2_duration_sec, lead.deadline_at or _deadline(s, f))
 
 
 async def active_chain(db: AsyncSession, funnel_id: int) -> list[ChainMessage]:
@@ -241,12 +241,12 @@ async def replan_message(db: AsyncSession, m: ChainMessage) -> None:
             .values(status="cancelled", reason="xabar qoralamaga o'tkazildi")
         )
         return
-    if m.trigger_type in ("on_button", "stuck"):
+    if m.trigger_type in EVENT_TRIGGERS:
         # vaqtga bog'liq eski rejalar endi kerak emas
         await db.execute(
             update(ScheduledMessage)
             .where(ScheduledMessage.chain_message_id == m.id, ScheduledMessage.status == "pending",
-                   ScheduledMessage.dedupe_key.not_like("stuck:%"))
+                   ScheduledMessage.dedupe_key.not_like("stuck:%"), ScheduledMessage.dedupe_key.not_like("left:%"))
             .values(status="cancelled", reason="trigger o'zgardi")
         )
         return
@@ -254,7 +254,7 @@ async def replan_message(db: AsyncSession, m: ChainMessage) -> None:
     await db.execute(
         update(ScheduledMessage)
         .where(ScheduledMessage.chain_message_id == m.id, ScheduledMessage.status == "pending",
-               ScheduledMessage.dedupe_key.not_like("stuck:%"))
+               ScheduledMessage.dedupe_key.not_like("stuck:%"), ScheduledMessage.dedupe_key.not_like("left:%"))
         .values(status="cancelled", reason="qayta rejalashtirildi")
     )
     horizon = now - timedelta(seconds=f.day2_duration_sec or 0)
@@ -266,3 +266,50 @@ async def replan_message(db: AsyncSession, m: ChainMessage) -> None:
     )).all()
     for s, lead in rows:
         await plan_for_session(db, lead, s, f, messages=[m], now=now)
+
+
+LEFT_AFTER = timedelta(seconds=150)   # shuncha vaqt heartbeat kelmasa — lid efirdan chiqib ketgan
+END_MARGIN = timedelta(minutes=2)     # video oxirida chiqqanlar "chiqib ketgan" hisoblanmaydi
+
+
+async def detect_left_live(db: AsyncSession, now: datetime | None = None) -> int:
+    """Efir davomida chiqib ketganlarni topadi va "chiqib ketganda" xabarlarini rejalashtiradi."""
+    now = now or now_utc()
+    rows = (await db.execute(
+        select(Attendance, LeadSession, Lead, Funnel)
+        .join(LeadSession, LeadSession.id == Attendance.session_id)
+        .join(Lead, Lead.id == Attendance.lead_id).join(Funnel, Funnel.id == Lead.funnel_id)
+        .where(Attendance.left_at.is_(None), Attendance.last_heartbeat_at < now - LEFT_AFTER,
+               Attendance.day_at >= now - timedelta(hours=6))
+    )).all()
+    count = 0
+    for a, s, lead, f in rows:
+        duration = timedelta(seconds=f.day1_duration_sec if a.day == 1 else f.day2_duration_sec)
+        if now >= a.day_at + duration or a.max_position_sec >= (duration - END_MARGIN).total_seconds():
+            continue  # efir tugagan yoki oxirigacha ko'rgan
+        a.left_at = a.last_heartbeat_at
+        event(db, lead, "left_live", day=a.day, minute=a.max_position_sec // 60)
+        msgs = (await db.execute(select(ChainMessage).where(
+            ChainMessage.funnel_id == f.id, ChainMessage.status == "active",
+            ChainMessage.trigger_type == "left_live", ChainMessage.trigger_day == a.day))).scalars().all()
+        stamp = int(a.left_at.timestamp())
+        for m in msgs:
+            await db.execute(insert(ScheduledMessage).values(
+                lead_id=lead.id, chain_message_id=m.id, session_id=s.id,
+                dedupe_key=f"left:{m.id}:{a.id}:{stamp}",
+                send_at=max(now, a.left_at + timedelta(minutes=m.offset_minutes)), status="pending",
+            ).on_conflict_do_nothing())
+        count += 1
+    await db.commit()
+    return count
+
+
+async def mark_returned(db: AsyncSession, a: Attendance) -> None:
+    """Lid efirga qaytdi — "chiqib ketganda" xabarlari kerak emas."""
+    if a.left_at is None:
+        return
+    a.left_at = None
+    await db.execute(
+        update(ScheduledMessage)
+        .where(ScheduledMessage.status == "pending", ScheduledMessage.dedupe_key.like(f"left:%:{a.id}:%"))
+        .values(status="cancelled", reason="efirga qaytdi"))

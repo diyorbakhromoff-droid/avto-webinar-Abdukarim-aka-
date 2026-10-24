@@ -25,6 +25,7 @@ async def main() -> None:
     await asyncio.gather(
         run_sender(bot, get_settings().send_rate_per_sec),
         every(15, jobs.evaluate_days),
+        every(30, jobs.left_live),
         every(20, jobs.expand_broadcasts),
         every(60, jobs.manager_reminders, bot),
         every(600, jobs.daily, bot),

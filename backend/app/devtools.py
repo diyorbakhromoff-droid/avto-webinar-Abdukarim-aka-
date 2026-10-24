@@ -27,9 +27,9 @@ async def demo() -> None:
         f = (await db.execute(select(Funnel).order_by(Funnel.id).limit(1))).scalar_one()
         f.day1_video_id = f.day2_video_id = SAMPLE_HLS
         f.day1_duration_sec, f.day2_duration_sec, f.day2_offer_sec = 74 * 60, 82 * 60, 58 * 60
-        f.speaker_name, f.speaker_title = "[Spiker ismi]", "Arab tili o'qituvchisi"
-        f.between_summary = ["Arab alifbosi 28 harfdan iborat", "Harf so'zdagi o'rniga qarab 4 xil yoziladi",
-                             "Uy vazifasi: 5 ta harfni 10 martadan yozing"]
+        f.speaker_name, f.speaker_title = "[Spiker ismi]", "Notiqlik murabbiyi"
+        f.between_summary = ["Nutqning boshlanishi tinglovchini birinchi 30 soniyada ushlab qoladi",
+                             "Pauza — so'zdan kuchliroq vosita", "Uy vazifasi: 1 daqiqalik nutqni telefonga yozib ko'ring"]
         f.bonuses = ["[bonus 1]", "[bonus 2]"]
         f.card_number, f.card_holder = "8600 0000 0000 0000", "[Karta egasi]"
         if not (await db.execute(select(Tariff).where(Tariff.funnel_id == f.id))).first():
@@ -37,7 +37,7 @@ async def demo() -> None:
                           special_price=1_490_000, regular_price=1_990_000, sort=0))
             db.add(Tariff(funnel_id=f.id, name="VIP", description="+ shaxsiy kurator",
                           special_price=2_490_000, regular_price=2_990_000, sort=1))
-        for t, a, txt in [(30, "Madina", "Assalomu alaykum!"), (95, "Sevara", "Alifbodan boshlaymizmi?"),
+        for t, a, txt in [(30, "Madina", "Assalomu alaykum!"), (95, "Sevara", "Hayajonni qanday yengsa bo'ladi?"),
                           (300, "Dilnoza", "Rahmat, tushunarli")]:
             db.add(LiveComment(funnel_id=f.id, day=1, t=t, author=a, text=txt))
         now = now_utc()

@@ -78,6 +78,8 @@ export interface AppStateResponse {
     duration_sec: number;
     hls_url: string;           // imzolangan, vaqtinchalik HLS havola
     comments: LiveComment[];   // "Asl efir ishtirokchilarining izohlari"
+    /** Efir chati: lidning shu efirda yozgan o'z xabarlari (faqat o'ziga ko'rinadi). t — videodagi soniya */
+    my_messages: { id: number; t: number; text: string; answer: string | null }[];
   } | null;
   /** state === 'between' */
   between: { day1_percent: number; day2_at: string; summary: string[] } | null;
@@ -91,6 +93,8 @@ export interface AppStateResponse {
 export interface HeartbeatRequest { session_id: number; day: 1 | 2; position_sec: number }
 
 // POST /api/app/question   body: { text: string }   -> { ok: true }
+//   Efir chati: xabar videoning qaysi soniyasida yozilgani bilan saqlanadi va admin paneldagi
+//   "Efir chati" bo'limiga tushadi (botdagi "Savol berish" — alohida "Savollar" bo'limida).
 // POST /api/app/offer-click body: { tariff_id: number | null } -> { ok: true }
 //   Bot lidga tarif/to'lov xabarini yuboradi; Mini App keyin Telegram.WebApp.close() qiladi.
 // POST /api/app/reschedule  body: {}  -> { ok: true }
@@ -161,11 +165,23 @@ export type TriggerType =
   | 'before_day'         // 1-kun yoki 2-kundan X oldin
   | 'at_day_start'       // kun boshlanishida (+X daqiqa: "sessiya boshidan X keyin")
   | 'after_day_end'      // kun tugaganidan X keyin
+  | 'left_live'          // efir davomida chiqib ketgandan X keyin (trigger_day — qaysi kun; qaytsa bekor bo'ladi)
+  | 'before_deadline'    // shaxsiy deadline tugashidan X oldin
   | 'on_button'          // tugma bosilganda
   | 'stuck';             // qadamda X vaqt to'xtab qolganda
 export type Segment =
-  | 'all' | 'day1_attended' | 'day1_missed' | 'day2_attended' | 'day2_missed'
-  | 'reached_offer' | 'left_before_offer' | 'receipt_sent' | 'deposit_paid' | 'full_paid' | 'not_paid';
+  | 'all'
+  // video ko'rish bo'yicha — segment_day (1|2) kerak, *_min uchun segment_minute ham
+  | 'not_joined'        // efirga kirmaganlar (botda bor, videoni ochmagan)
+  | 'reached_min'       // videoning X-daqiqasigacha ko'rganlar
+  | 'left_before_min'   // kirgan, lekin X-daqiqaga yetmay chiqib ketganlar
+  | 'watched_full'      // oxirigacha (95%) ko'rganlar
+  | 'not_full'          // kirgan, lekin oxirigacha ko'rmaganlar
+  // kun natijasi
+  | 'day1_attended' | 'day1_missed' | 'day2_attended' | 'day2_missed'
+  | 'reached_offer' | 'left_before_offer'
+  // to'lov
+  | 'receipt_sent' | 'deposit_paid' | 'full_paid' | 'not_paid';
 export type StuckStep = 'no_phone' | 'no_session' | 'no_receipt' | 'receipt_rejected';
 export type ButtonType = 'url' | 'webapp' | 'reschedule' | 'pay';
 export interface ChainButton { type: ButtonType; text: string; url?: string }
@@ -183,6 +199,8 @@ export interface ChainMessage {
   stuck_step: StuckStep | null;  // trigger_type === 'stuck'
   button_key: string | null;     // trigger_type === 'on_button'
   segment: Segment;
+  segment_day: 1 | 2 | null;     // ko'rish segmentlari: qaysi kun videosi (bo'sh bo'lsa trigger_day)
+  segment_minute: number | null; // reached_min / left_before_min: X-daqiqa
   required: boolean;             // siqish qoidasi uchun
   status: 'active' | 'draft';
   sort: number;
@@ -284,7 +302,31 @@ export interface PaymentRow {
 // POST /api/admin/payments/{id}/refund -> PaymentRow
 export const REJECT_REASONS = ["Summa mos emas", "Chek o'qilmaydi", "To'lov topilmadi", "Boshqa sabab"];
 
-// ── Savollar ──
+// ── Tomosha statistikasi (har N daqiqada) ──
+// GET /api/admin/funnels/{id}/watch-stats?day=1&step=5&date_from&date_to&source&slot -> WatchStats
+export interface WatchStats {
+  day: 1 | 2; step: number; duration_min: number; offer_min: number | null;
+  joined: number;          // efirga kirganlar
+  avg_watch_min: number;   // o'rtacha necha daqiqa ko'rdi
+  full: number;            // oxirigacha ko'rganlar
+  buckets: { minute: number; viewers: number; share: number; drop: number; left: number }[];
+  //   minute — videoning daqiqasi (0, 5, 10, ...); viewers — shu daqiqada ko'rib turganlar;
+  //   share — kirganlarga nisbatan 0..1; drop — oldingi nuqtadan kamayish (0..1); left — oraliqda chiqib ketganlar
+  top_drops: { from_minute: number; to_minute: number; left: number }[];  // eng ko'p chiqib ketilgan 3 oraliq
+}
+
+// ── Efir chati (Mini App'da efir davomida yozilganlar) ──
+export interface ChatRow {
+  id: number; lead_id: number; lead_name: string; lead_phone: string | null; // kontent menejerga telefon null
+  text: string; day: 1 | 2 | null; video_sec: number | null;  // videoning qaysi soniyasida yozilgan
+  session_at: string | null;  // shu kun efirining boshlanish vaqti
+  created_at: string; answer: string | null; answered_at: string | null; answered_by: string | null;
+}
+// GET  /api/admin/chat?funnel_id&date=YYYY-MM-DD&day=1|2&status=all|unanswered -> ChatRow[]  (barcha rollar)
+// GET  /api/admin/chat/sessions?funnel_id -> { day: 1|2; at: string; count: number; unanswered: number }[]
+// POST /api/admin/chat/{id}/reply {text} -> ChatRow   (javob lidga bot orqali boradi)
+
+// ── Savollar (botdagi "Savol berish" — efirdan keyin) ──
 export interface QuestionRow { id: number; lead_id: number; lead_name: string; text: string; source: 'miniapp' | 'bot'; created_at: string; answer: string | null; answered_at: string | null }
 // GET  /api/admin/questions?funnel_id&answered=false -> QuestionRow[]
 // POST /api/admin/questions/{id}/answer {text}
@@ -300,7 +342,7 @@ export interface DashboardResponse {
   kpis: { start: number; phone: number; day1_watched: number; full_paid: number; deposit_paid: number; cost_per_sale: number | null };
   funnel: { label: string; n: number; rate: number | null }[]; // rate — oldingi bosqichdan, 0..1
   upcoming: { at: string; day1_count: number; day2_count: number }[];
-  pending_receipts: number; unanswered_questions: number; failed_messages: number;
+  pending_receipts: number; unanswered_questions: number; unanswered_chat: number; failed_messages: number;
 }
 // GET /api/admin/dashboard?funnel_id&period=today|7d|30d
 
