@@ -29,8 +29,13 @@ API boshqa domenda bo'lsa, build vaqtida `VITE_API_BASE=https://api.example.uz` 
   qolganlari — hls.js (adaptiv sifat). Birinchi ochilishda "Ko'rishni boshlash" tugmasi (iOS ovozli autoplay'ga ruxsat bermaydi).
   Imzolangan havola yangilansa, tarmoq xatosida yangi havola bilan qayta ulanadi.
 - **Heartbeat:** ijro boshlanganda va har 30 soniyada `POST /api/app/heartbeat`.
-- **Izohlar:** "Asl efir ishtirokchilarining izohlari" — `t <= pozitsiya` bo'lganlari, yangisi pastda.
-- **Savol:** `POST /api/app/question`.
+- **Lenta (pleyer ostida, 2 ta tab):** "Efir izohlari" — "Asl efir ishtirokchilarining izohlari", `t <= pozitsiya`
+  bo'lganlari, yangisi pastda; "Mening chatim (N)" — `live.my_messages` (lidning shu efirdagi o'z xabarlari va jamoa
+  javoblari, faqat o'ziga ko'rinadi).
+- **Efir chati:** `POST /api/app/question` (backend videoning soniyasini o'zi saqlaydi). Yuborilgan xabar darhol
+  "Mening chatim" ga qo'shiladi (joriy video soniyasi bilan), tab almashadi, toast chiqadi va holat qayta so'raladi;
+  server ro'yxati kelganda mahalliy nusxa almashtiriladi (javobda id yo'q — yuborilgandan keyingi id + bir xil matn
+  bo'yicha). Xatoda xabar olib tashlanadi, matn maydonga qaytadi.
 - **Sotuv bloki:** `offer.visible_from_sec` dan keyin (`soft` — 1-kundagi ixcham banner). "Kursga yozilish" →
   `POST /api/app/offer-click` → `Telegram.WebApp.close()` (to'lovni bot davom ettiradi). `offer.closed` — tugma yo'q.
 - **Qayta vaqt tanlash:** `POST /api/app/reschedule` → Mini App yopiladi, bot vaqt tugmalarini yuboradi.
@@ -48,14 +53,17 @@ src/
   lib/money.ts                 "1 990 000 so'm"
   lib/telegram.ts              Telegram WebApp SDK qatlami
   lib/hooks.ts                 useServerNow, bot amallari
-  components/                  Player, Countdown, OfferBlock, Comments, QuestionBox, SpeakerCard, ...
+  lib/chat.ts                  efir chati: server ro'yxati + optimistik xabarlar
+  components/                  Player, Countdown, OfferBlock, LiveFeed (tablar), Comments, QuestionBox (chat maydoni),
+                               SpeakerCard, Decor (mikrofon, tovush to'lqinlari — inline SVG), ...
   screens/                     Waiting, Live, Between, Missed (missed/closed), Ended, NoSession, ErrorScreen
-  styles.css                   palitra va barcha uslublar
+  styles.css                   palitra (tinch ko'k, CSS o'zgaruvchilari) va barcha uslublar
 ```
 
 ## Mock rejim
 
 `npm run dev:mock` — Telegram'siz oddiy brauzerda ochiladi. Pastki chapdagi "M" tugmasi barcha holatlarni
-(va ba'zi variantlarni: yumshoq taklif, deadline tugashi, limit tugagan, 401 xato) almashtiradi.
+(va ba'zi variantlarni: yumshoq taklif, efir chatida xabarlar, deadline tugashi, limit tugagan, 401 xato) almashtiradi.
+Efir chatiga `xato` deb yozilsa, mock yuborish xatosini qaytaradi (xato holatini tekshirish uchun).
 "live" holatida ommaviy namunaviy HLS oqimi ishlatiladi. Vaqt o'tishi bilan holatlar o'zgaradi
 (masalan, "waiting — 10 soniya" efirga o'tadi). Mock kodi production build'ga kirmaydi.

@@ -1,6 +1,6 @@
 import type { AppStateResponse } from '../api/types';
-import { ArabicDecor } from '../components/BrandHeader';
 import { Countdown } from '../components/Countdown';
+import { SoundArcs } from '../components/Decor';
 import { BonusList, OfferClosedNote, TariffList, useSelectedTariff } from '../components/OfferBlock';
 import { useBotAction } from '../lib/hooks';
 import { closeApp } from '../lib/telegram';
@@ -28,7 +28,7 @@ export function Ended({ data, onRefresh }: Props) {
 
   return (
     <main className="screen screen--fixed">
-      <ArabicDecor text="شكرا" className="decor--ended" />
+      <SoundArcs />
 
       <div className="page-scroll">
         <div className="hero">
@@ -37,7 +37,7 @@ export function Ended({ data, onRefresh }: Props) {
         </div>
 
         {showTimer && offer?.deadline_at && (
-          <section className="card card--gold deadline-card" aria-label="Maxsus narx tugashigacha qolgan vaqt">
+          <section className="card card--accent deadline-card spotlight" aria-label="Maxsus narx tugashigacha qolgan vaqt">
             <div className="deadline-card__label">Maxsus narx tugashiga</div>
             <Countdown target={offer.deadline_at} size="md" onDone={onRefresh} />
             <div className="deadline-card__date">Muddat: {formatDateTime(offer.deadline_at)}</div>

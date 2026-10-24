@@ -52,6 +52,14 @@ export interface LiveComment {
   text: string;
 }
 
+/** Efir chati: lidning shu efirda yozgan o'z xabari (faqat o'ziga va jamoaga ko'rinadi). t — videodagi soniya */
+export interface MyMessage {
+  id: number;
+  t: number;
+  text: string;
+  answer: string | null;
+}
+
 export interface AppStateResponse {
   server_time: string;
   lead: { first_name: string };
@@ -69,6 +77,7 @@ export interface AppStateResponse {
     duration_sec: number;
     hls_url: string;
     comments: LiveComment[];
+    my_messages: MyMessage[];
   } | null;
   between: { day1_percent: number; day2_at: string; summary: string[] } | null;
   missed: { day: 1 | 2; started_at: string | null; reschedules_left: number } | null;

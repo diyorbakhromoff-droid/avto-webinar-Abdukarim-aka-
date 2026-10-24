@@ -213,11 +213,12 @@ async def question(body: QuestionIn, lead: Lead = Depends(webapp_lead), db: Asyn
         session_id = s.id
         if res.state in ("live", "closed") and res.started_at:
             day, video_sec = res.day, int((now - res.started_at).total_seconds())
-    db.add(Question(lead_id=lead.id, text=body.text.strip(), source="miniapp", session_id=session_id, day=day,
-                    video_sec=video_sec))
+    q = Question(lead_id=lead.id, text=body.text.strip(), source="miniapp", session_id=session_id, day=day,
+                 video_sec=video_sec)
+    db.add(q)
     event(db, lead, "question")
     await db.commit()
-    return {"ok": True}
+    return {"ok": True, "message": {"id": q.id, "t": q.video_sec or 0, "text": q.text, "answer": None}}
 
 
 class OfferClickIn(BaseModel):

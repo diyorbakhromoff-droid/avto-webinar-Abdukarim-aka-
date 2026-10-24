@@ -1,7 +1,7 @@
 import type { AppStateResponse } from '../api/types';
-import { ArabicDecor } from '../components/BrandHeader';
 import { Countdown } from '../components/Countdown';
-import { IconCheck } from '../components/Icons';
+import { EqualizerBars, QuoteMark } from '../components/Decor';
+import { IconBubbles, IconCheck } from '../components/Icons';
 import { closeApp } from '../lib/telegram';
 import { formatWhen } from '../lib/time';
 
@@ -18,7 +18,7 @@ export function Between({ data, onRefresh }: Props) {
 
   return (
     <main className="screen screen--page">
-      <ArabicDecor text="أحسنت" className="decor--between" />
+      <EqualizerBars />
 
       <div className="hero hero--center">
         <div className="hero__badge">
@@ -43,9 +43,13 @@ export function Between({ data, onRefresh }: Props) {
 
       {summary.length > 0 && (
         <section className="summary" aria-labelledby="summary-title">
-          <h2 id="summary-title" className="eyebrow">
-            1-kun xulosasi
-          </h2>
+          <QuoteMark className="summary__quote" />
+          <div className="summary__head">
+            <IconBubbles className="summary__bubble" />
+            <h2 id="summary-title" className="eyebrow">
+              1-kun xulosasi
+            </h2>
+          </div>
           <ol className="summary__list">
             {summary.map((item, i) => (
               <li key={i} className="summary__item">

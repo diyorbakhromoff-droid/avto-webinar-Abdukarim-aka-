@@ -6,8 +6,6 @@ import { IconChat } from './Icons';
 interface Props {
   comments: LiveComment[];
   positionSec: number;
-  /** 'fill' — qolgan balandlikni egallaydi; 'boxed' — cheklangan balandlikdagi blok */
-  variant?: 'fill' | 'boxed';
 }
 
 const MAX_RENDERED = 120;
@@ -24,8 +22,11 @@ function visibleCount(sorted: LiveComment[], pos: number): number {
   return lo;
 }
 
-/** "Asl efir ishtirokchilarining izohlari" — videoga sinxron, yozish imkoni yo'q. */
-export function Comments({ comments, positionSec, variant = 'fill' }: Props) {
+/**
+ * "Asl efir ishtirokchilarining izohlari" — videoga sinxron, yozish imkoni yo'q.
+ * Balandlik (to'ldirish yoki cheklangan blok) LiveFeed orqali beriladi.
+ */
+export function Comments({ comments, positionSec }: Props) {
   const sorted = useMemo(() => [...comments].sort((a, b) => a.t - b.t), [comments]);
   const count = visibleCount(sorted, positionSec);
   const shown = sorted.slice(Math.max(0, count - MAX_RENDERED), count);
@@ -51,7 +52,7 @@ export function Comments({ comments, positionSec, variant = 'fill' }: Props) {
   }, []);
 
   return (
-    <section className={`comments comments--${variant}`} aria-labelledby="comments-title">
+    <section className="comments" aria-labelledby="comments-title">
       <div className="comments__head">
         <h2 id="comments-title" className="comments__title">
           Asl efir ishtirokchilarining izohlari

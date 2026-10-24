@@ -71,6 +71,14 @@ export const IconChat = (p: P) => (
   </Svg>
 );
 
+/** Ikki nutq pufakchasi (suhbat) */
+export const IconBubbles = (p: P) => (
+  <Svg {...p}>
+    <path d="M14 9a2 2 0 0 1-2 2H6l-4 4V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2z" />
+    <path d="M18 9h2a2 2 0 0 1 2 2v11l-4-4h-6a2 2 0 0 1-2-2v-1" />
+  </Svg>
+);
+
 export const IconSend = (p: P) => (
   <Svg strokeWidth={2.2} {...p}>
     <path d="m22 2-7 20-4-9-9-4z" />

@@ -35,7 +35,7 @@ export interface Tariff {
 }
 
 export interface Offer {
-  course_title: string;        // "Arab tili: 3 oylik kurs"
+  course_title: string;        // "Notiqlik kursi"
   tariffs: Tariff[];
   bonuses: string[];
   deadline_at: string | null;  // lidning shaxsiy deadline'i
@@ -47,7 +47,7 @@ export interface Offer {
 }
 
 export interface FunnelBrand {
-  course_title: string;      // "Arab tili kursi"
+  course_title: string;      // "Notiqlik kursi"
   webinar_title: string;     // "Bepul webinar · 2 kun"
   topic: string;             // efir mavzusi
   speaker_name: string;
@@ -92,7 +92,7 @@ export interface AppStateResponse {
 // POST /api/app/heartbeat  body: HeartbeatRequest  -> { ok: true, server_time }
 export interface HeartbeatRequest { session_id: number; day: 1 | 2; position_sec: number }
 
-// POST /api/app/question   body: { text: string }   -> { ok: true }
+// POST /api/app/question   body: { text: string }   -> { ok: true, message: { id, t, text, answer: null } }
 //   Efir chati: xabar videoning qaysi soniyasida yozilgani bilan saqlanadi va admin paneldagi
 //   "Efir chati" bo'limiga tushadi (botdagi "Savol berish" — alohida "Savollar" bo'limida).
 // POST /api/app/offer-click body: { tariff_id: number | null } -> { ok: true }

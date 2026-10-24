@@ -1,5 +1,6 @@
 import type { AppStateResponse } from '../api/types';
-import { ArabicDecor, BrandHeader } from '../components/BrandHeader';
+import { BrandHeader } from '../components/BrandHeader';
+import { WaveLines } from '../components/Decor';
 import { IconCalendar } from '../components/Icons';
 import { useBotAction } from '../lib/hooks';
 import { closeApp } from '../lib/telegram';
@@ -9,7 +10,7 @@ export function NoSession({ data }: { data: AppStateResponse }) {
   const name = data.lead.first_name?.trim();
   return (
     <main className="screen screen--page">
-      <ArabicDecor text="عربي" className="decor--waiting" />
+      <WaveLines />
       <BrandHeader funnel={data.funnel} />
       <div className="center-block">
         <div className="round-icon">

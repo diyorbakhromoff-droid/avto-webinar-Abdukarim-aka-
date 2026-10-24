@@ -20,14 +20,23 @@ type Phase =
 
 const SAFETY_REFRESH_MS = 60_000;
 const MIN_REFRESH_GAP_MS = 3_000;
-const DEFAULT_BG = '#120f0b';
+/** styles.css dagi standart palitra bilan bir xil (backend standarti ham shu). */
+const DEFAULT_BG = '#0e1726';
+const DEFAULT_PRIMARY = '#5b9bef';
 const HEX = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i;
 
 /** Voronka mavzusi (funnel.theme) → CSS o'zgaruvchilari; standart — palitra. */
 function applyTheme(theme: AppStateResponse['funnel']['theme']): void {
   const root = document.documentElement;
-  if (HEX.test(theme.primary)) root.style.setProperty('--gold', theme.primary);
-  else root.style.removeProperty('--gold');
+  if (HEX.test(theme.primary)) {
+    root.style.setProperty('--primary', theme.primary);
+    // Standartdan farqli rang: bosilgan holat (--primary-strong) shu rangdan hosil qilinadi
+    if (theme.primary.toLowerCase() !== DEFAULT_PRIMARY) root.setAttribute('data-custom-primary', '');
+    else root.removeAttribute('data-custom-primary');
+  } else {
+    root.style.removeProperty('--primary');
+    root.removeAttribute('data-custom-primary');
+  }
 
   if (HEX.test(theme.background)) {
     root.style.setProperty('--bg', theme.background);

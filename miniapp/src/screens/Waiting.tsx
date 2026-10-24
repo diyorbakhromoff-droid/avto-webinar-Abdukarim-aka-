@@ -1,6 +1,7 @@
 import type { AppStateResponse, SessionInfo } from '../api/types';
-import { ArabicDecor, BrandHeader } from '../components/BrandHeader';
+import { BrandHeader } from '../components/BrandHeader';
 import { Countdown } from '../components/Countdown';
+import { WaveLines } from '../components/Decor';
 import { IconInfo } from '../components/Icons';
 import { SpeakerCard } from '../components/SpeakerCard';
 import { useBotAction } from '../lib/hooks';
@@ -29,7 +30,7 @@ export function Waiting({ data, session, onRefresh }: Props) {
 
   return (
     <main className="screen screen--page">
-      <ArabicDecor text="عربي" className="decor--waiting" />
+      <WaveLines />
       <BrandHeader funnel={funnel} />
 
       <div className="topic">
@@ -37,7 +38,7 @@ export function Waiting({ data, session, onRefresh }: Props) {
         <h1 className="topic__title">{funnel.topic}</h1>
       </div>
 
-      <section className="card countdown-card" aria-label="1-kun efirigacha qolgan vaqt">
+      <section className="card countdown-card spotlight" aria-label="1-kun efirigacha qolgan vaqt">
         <div className="countdown-card__label">1-kun efirigacha qoldi</div>
         <Countdown target={session.day1_at} onDone={onRefresh} size="lg" />
       </section>

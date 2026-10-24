@@ -1,15 +1,25 @@
-/* ───────────── Mavzu (funnel.theme bilan almashtiriladi) ───────────── */
+/* ───────────── Mavzu (funnel.theme bilan almashtiriladi) ─────────────
+   Tinch ko'k palitra: to'q dengiz-ko'k fon, past yorqinlik.
+   Kontrast (WCAG): text/surface2 11.8, muted/surface2 6.2, primary/surface2 4.85,
+   on-primary/primary 6.5, on-primary/primary-strong 5.1. */
 :root {
-  --bg: #120f0b;
-  --surface: #1c1813;
-  --surface2: #26201a;
-  --line: #3a3127;
-  --gold: #d4af5a;
-  --text: #f4eee3;
-  --muted: #b3a893;
-  --faint: #8f8574;
-  --cta-text: #1a140c;
-  --danger: #e59a7d;
+  --bg: #0e1726;
+  --surface: #16233a;
+  --surface2: #1d2d48;
+  --line: #2a3d5e;
+  --primary: #5b9bef;
+  --primary-strong: #4a88da; /* hover / bosilgan */
+  --text: #e8eef7;
+  --muted: #9db0c9;
+  --faint: #8da2be; /* 5.3:1 surface2 da */
+  --on-primary: #0b1420;
+  --danger: #f4a3a0;
+
+  /* Bezak va yorug'lik uchun shaffof primary (color-mix bo'lmasa — standart rang) */
+  --primary-a08: rgba(91, 155, 239, 0.08);
+  --primary-a14: rgba(91, 155, 239, 0.14);
+  --primary-a20: rgba(91, 155, 239, 0.2);
+  --primary-a35: rgba(91, 155, 239, 0.35);
 
   --app-h: var(--tg-viewport-height, 100vh);
   --safe-b: env(safe-area-inset-bottom, 0px);
@@ -17,12 +27,24 @@
   color-scheme: dark;
 }
 
-/* Admin boshqa fon rangini tanlasa, sirt ranglari shu fondan hosil qilinadi */
 @supports (color: color-mix(in srgb, red, blue)) {
+  :root {
+    --primary-a08: color-mix(in srgb, var(--primary) 8%, transparent);
+    --primary-a14: color-mix(in srgb, var(--primary) 14%, transparent);
+    --primary-a20: color-mix(in srgb, var(--primary) 20%, transparent);
+    --primary-a35: color-mix(in srgb, var(--primary) 35%, transparent);
+  }
+
+  /* Admin boshqa fon rangini tanlasa, sirt ranglari shu fondan hosil qilinadi */
   :root[data-custom-bg] {
     --surface: color-mix(in srgb, var(--bg) 95%, #fff);
     --surface2: color-mix(in srgb, var(--bg) 90%, #fff);
     --line: color-mix(in srgb, var(--bg) 82%, #fff);
+  }
+
+  /* Admin boshqa asosiy rang tanlasa, bosilgan holat shu rangdan hosil qilinadi */
+  :root[data-custom-primary] {
+    --primary-strong: color-mix(in srgb, var(--primary) 86%, #000);
   }
 }
 
@@ -63,11 +85,11 @@ button {
 }
 
 a {
-  color: var(--gold);
+  color: var(--primary);
 }
 
 :focus-visible {
-  outline: 2px solid var(--gold);
+  outline: 2px solid var(--primary);
   outline-offset: 2px;
 }
 
@@ -85,10 +107,6 @@ a {
 
 .nowrap {
   white-space: nowrap;
-}
-
-.arabic {
-  font-family: Amiri, 'Times New Roman', serif;
 }
 
 /* ───────────── Ilova karkasi ───────────── */
@@ -134,6 +152,13 @@ a {
   overflow: hidden;
 }
 
+/* Efir: odatda hammasi sig'adi; juda past ekranda kesilmasdan aylanadi */
+.screen--live:not(.screen--offer) {
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
 .page-scroll,
 .live-scroll {
   flex: 1 1 auto;
@@ -147,38 +172,42 @@ a {
   padding-bottom: 16px;
 }
 
+/* Fondagi bezak (tovush to'lqinlari, ekvalayzer) — faqat bezak, past shaffoflik */
 .decor {
   position: absolute;
   z-index: -1;
-  line-height: 1;
-  color: var(--gold);
+  display: block;
+  color: var(--primary);
   pointer-events: none;
   user-select: none;
   -webkit-user-select: none;
-  white-space: nowrap;
 }
 
-.decor--waiting {
-  top: -40px;
-  right: -30px;
-  font-size: 190px;
-  opacity: 0.07;
-}
-
-.decor--between {
-  bottom: 60px;
-  left: -20px;
-  font-size: 160px;
-  opacity: 0.06;
-}
-
-.decor--ended {
-  top: -30px;
+/* Kutish: brend va mavzu ortida yumshoq to'lqin chiziqlari */
+.decor--waves {
+  top: 8px;
   left: 0;
-  right: 0;
-  text-align: center;
-  font-size: 150px;
-  opacity: 0.06;
+  width: 100%;
+  height: 170px;
+  opacity: 0.16;
+}
+
+/* Kunlar orasida: pastki chapda ekvalayzer chiziqlari */
+.decor--bars {
+  bottom: 96px;
+  left: -8px;
+  width: 220px;
+  height: 120px;
+  opacity: 0.08;
+}
+
+/* Tugagan: yuqori o'ng burchakdan tarqaluvchi tovush yoylari */
+.decor--arcs {
+  top: -24px;
+  right: -24px;
+  width: 210px;
+  height: 210px;
+  opacity: 0.1;
 }
 
 /* ───────────── Umumiy elementlar ───────────── */
@@ -187,7 +216,7 @@ a {
   font-size: 13px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--gold);
+  color: var(--primary);
   font-weight: 700;
 }
 
@@ -205,8 +234,8 @@ a {
   border: 1px solid var(--line);
 }
 
-.card--gold {
-  border-color: var(--gold);
+.card--accent {
+  border-color: var(--primary);
 }
 
 .chip {
@@ -221,10 +250,10 @@ a {
   padding: 4px 10px;
   border-radius: 999px;
   background: var(--surface2);
-  border: 1px solid var(--gold);
+  border: 1px solid var(--primary);
   font-size: 12px;
   font-weight: 800;
-  color: var(--gold);
+  color: var(--primary);
   letter-spacing: 0.06em;
 }
 
@@ -245,7 +274,7 @@ a {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--gold);
+  color: var(--primary);
   flex-shrink: 0;
 }
 
@@ -291,9 +320,23 @@ a {
 }
 
 .btn--primary {
-  background: var(--gold);
-  color: var(--cta-text);
+  background: var(--primary);
+  color: var(--on-primary);
   font-weight: 800;
+  transition:
+    transform 0.1s ease,
+    opacity 0.15s ease,
+    background-color 0.15s ease;
+}
+
+.btn--primary:active:not(:disabled) {
+  background: var(--primary-strong);
+}
+
+@media (hover: hover) {
+  .btn--primary:hover:not(:disabled) {
+    background: var(--primary-strong);
+  }
 }
 
 .btn--lg {
@@ -360,7 +403,7 @@ a {
   height: 28px;
   border-radius: 50%;
   border: 3px solid rgba(255, 255, 255, 0.25);
-  border-top-color: var(--gold);
+  border-top-color: var(--primary);
   animation: spin 0.9s linear infinite;
 }
 
@@ -368,8 +411,8 @@ a {
   width: 18px;
   height: 18px;
   border-width: 2px;
-  border-color: rgba(26, 20, 12, 0.3);
-  border-top-color: var(--cta-text);
+  border-color: rgba(11, 20, 32, 0.3);
+  border-top-color: var(--on-primary);
 }
 
 @keyframes spin {
@@ -392,12 +435,12 @@ a {
   flex-shrink: 0;
   border-radius: 12px;
   border: 1px solid var(--line);
+  background: var(--surface2);
   display: flex;
   align-items: center;
   justify-content: center;
   overflow: hidden;
-  font-size: 24px;
-  color: var(--gold);
+  color: var(--primary);
 }
 
 .brand__logo img {
@@ -445,6 +488,50 @@ a {
   gap: 14px;
 }
 
+/* Sahna yorug'ligi: taymer ortida yuqoridan tushuvchi xira nur va yorug' dog' */
+.spotlight {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.spotlight::before,
+.spotlight::after {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  pointer-events: none;
+}
+
+.spotlight::before {
+  top: 0;
+  left: 50%;
+  width: 70%;
+  height: 100%;
+  transform: translateX(-50%);
+  background: linear-gradient(to bottom, var(--primary-a14), transparent 85%);
+  clip-path: polygon(38% 0, 62% 0, 100% 100%, 0 100%);
+}
+
+.spotlight::after {
+  left: 50%;
+  bottom: -30%;
+  width: 110%;
+  height: 80%;
+  transform: translateX(-50%);
+  background: radial-gradient(closest-side, var(--primary-a14), transparent);
+}
+
+.spotlight .tile {
+  background: rgba(29, 45, 72, 0.82);
+}
+
+@supports (color: color-mix(in srgb, red, blue)) {
+  .spotlight .tile {
+    background: color-mix(in srgb, var(--surface2) 82%, transparent);
+  }
+}
+
 .countdown-card__label {
   font-size: 14px;
   color: var(--muted);
@@ -473,7 +560,7 @@ a {
   line-height: 1.15;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
-  color: var(--gold);
+  color: var(--primary);
 }
 
 .tile__unit {
@@ -509,7 +596,7 @@ a {
 }
 
 .day-card--active {
-  border-color: var(--gold);
+  border-color: var(--primary);
 }
 
 .day-card__label {
@@ -519,7 +606,7 @@ a {
 }
 
 .day-card--active .day-card__label {
-  color: var(--gold);
+  color: var(--primary);
 }
 
 .day-card__date {
@@ -549,15 +636,15 @@ a {
   height: 56px;
   flex-shrink: 0;
   border-radius: 50%;
-  background: var(--line);
-  border: 2px solid var(--gold);
+  background: var(--surface2);
+  border: 2px solid var(--primary);
   display: flex;
   align-items: center;
   justify-content: center;
   overflow: hidden;
   font-size: 18px;
   font-weight: 800;
-  color: var(--gold);
+  color: var(--primary);
 }
 
 .speaker__photo img {
@@ -622,11 +709,11 @@ a {
   width: 64px;
   height: 64px;
   border-radius: 50%;
-  border: 2px solid var(--gold);
+  border: 2px solid var(--primary);
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--gold);
+  color: var(--primary);
 }
 
 .hero__title {
@@ -703,15 +790,44 @@ a {
   font-size: 30px;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
-  color: var(--gold);
+  color: var(--primary);
   white-space: nowrap;
 }
 
 .summary {
+  position: relative;
+  isolation: isolate;
   margin: 16px 20px 0;
+  padding: 18px 20px 20px;
+  border-radius: 20px;
+  background: var(--surface);
+  border: 1px solid var(--line);
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+
+.summary__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-right: 48px;
+}
+
+.summary__bubble {
+  flex-shrink: 0;
+  color: var(--primary);
+}
+
+/* Katta qo'shtirnoq — bezak */
+.summary__quote {
+  position: absolute;
+  z-index: -1;
+  top: 12px;
+  right: 14px;
+  color: var(--primary);
+  opacity: 0.22;
+  pointer-events: none;
 }
 
 .summary__list {
@@ -742,7 +858,7 @@ a {
   justify-content: center;
   font-size: 13px;
   font-weight: 800;
-  color: var(--gold);
+  color: var(--primary);
 }
 
 /* ───────────── Efir ───────────── */
@@ -786,6 +902,12 @@ a {
   font-size: 19px;
   line-height: 1.3;
   font-weight: 800;
+  /* Uzun mavzu 2 qatordan oshmaydi — lenta uchun joy qolsin */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
 }
 
 .live-info__note {
@@ -858,7 +980,7 @@ a {
 
 .player__progress-fill {
   height: 100%;
-  background: var(--gold);
+  background: var(--primary);
   transition: width 1s linear;
 }
 
@@ -905,8 +1027,8 @@ a {
   padding: 0 24px;
   border: 0;
   border-radius: 999px;
-  background: var(--gold);
-  color: var(--cta-text);
+  background: var(--primary);
+  color: var(--on-primary);
   font-size: 16px;
   font-weight: 800;
   box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45);
@@ -918,7 +1040,7 @@ a {
 
 .player__cover-note {
   font-size: 13px;
-  color: #ddd3c1;
+  color: #d5dfec;
   font-variant-numeric: tabular-nums;
 }
 
@@ -950,6 +1072,192 @@ a {
   padding-bottom: calc(8px + var(--safe-b));
 }
 
+/* Efir lentasi: "Efir izohlari" | "Mening chatim" */
+.feed {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  margin: 10px 16px 0;
+  gap: 10px;
+}
+
+.feed--fill {
+  flex: 1 1 auto;
+  /* Past ekranda ham lenta ko'rinsin; joy yetmasa butun ekran aylanadi (chat maydoni kesilmaydi) */
+  min-height: 150px;
+}
+
+.seg {
+  flex-shrink: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+  padding: 3px;
+  border-radius: 12px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+}
+
+.seg__tab {
+  min-width: 0;
+  min-height: 38px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.seg__tab[aria-selected='true'] {
+  background: var(--surface2);
+  color: var(--text);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+
+.seg__count {
+  font-variant-numeric: tabular-nums;
+}
+
+.feed__panel {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.feed .comments {
+  flex: 1 1 auto;
+  margin: 0;
+  padding-top: 0;
+  border-top: 0;
+}
+
+.feed--boxed .comments__list,
+.feed--boxed .mychat__list {
+  flex: none;
+  max-height: 260px;
+}
+
+/* Mening chatim */
+.mychat {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1 1 auto;
+}
+
+.mychat__privacy {
+  flex-shrink: 0;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--muted);
+}
+
+.mychat__privacy svg {
+  flex-shrink: 0;
+}
+
+.mychat__list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 10px 0;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 14px);
+  mask-image: linear-gradient(to bottom, transparent 0, #000 14px);
+}
+
+.mychat__empty {
+  margin: 0;
+  padding: 6px 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.mymsg {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.mymsg__meta {
+  align-self: flex-end;
+  font-size: 12px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.mymsg__me {
+  font-weight: 700;
+  color: var(--text);
+}
+
+.mymsg__bubble {
+  align-self: flex-end;
+  max-width: 88%;
+  margin: 0;
+  padding: 9px 12px;
+  border-radius: 14px 14px 4px 14px;
+  background: var(--primary-a14);
+  border: 1px solid var(--primary-a35);
+  font-size: 14px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.mymsg--sending .mymsg__bubble {
+  opacity: 0.7;
+}
+
+.mymsg__answer {
+  align-self: flex-start;
+  max-width: 88%;
+  padding: 9px 12px;
+  border-radius: 14px 14px 14px 4px;
+  background: var(--surface2);
+  border-left: 3px solid var(--primary);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.mymsg__answer-text {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.mymsg__answer-label {
+  font-weight: 800;
+  color: var(--primary);
+}
+
+.mymsg__answer-note {
+  font-size: 12px;
+  color: var(--muted);
+}
+
 /* Izohlar */
 .comments {
   display: flex;
@@ -958,10 +1266,6 @@ a {
   margin: 10px 16px 0;
   padding-top: 12px;
   border-top: 1px solid var(--line);
-}
-
-.comments--fill {
-  flex: 1 1 auto;
 }
 
 .comments__head {
@@ -997,11 +1301,6 @@ a {
   mask-image: linear-gradient(to bottom, transparent 0, #000 14px);
 }
 
-.comments--boxed .comments__list {
-  flex: none;
-  max-height: 240px;
-}
-
 .comments__empty {
   margin: 0;
   padding: 6px 0;
@@ -1019,13 +1318,14 @@ a {
   height: 32px;
   flex-shrink: 0;
   border-radius: 50%;
-  background: var(--line);
+  background: var(--surface2);
+  border: 1px solid var(--line);
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 13px;
   font-weight: 700;
-  color: var(--gold);
+  color: var(--primary);
 }
 
 .comment__body {
@@ -1065,16 +1365,24 @@ a {
 
 .question__hint {
   font-size: 12px;
+  line-height: 1.35;
   color: var(--muted);
 }
 
-.question__hint--sent {
-  color: var(--gold);
+.question__hint b {
+  color: var(--text);
   font-weight: 700;
 }
 
-.question__hint--error {
+/* Xato xabari (bo'sh bo'lsa joy egallamaydi, lekin live region sifatida turadi) */
+.question__status {
+  font-size: 12px;
+  line-height: 1.35;
   color: var(--danger);
+}
+
+.question__status:empty {
+  margin-top: -6px;
 }
 
 .question__row {
@@ -1102,7 +1410,7 @@ a {
 
 .question__input:focus {
   outline: none;
-  border-color: var(--gold);
+  border-color: var(--primary);
 }
 
 .question__send {
@@ -1114,8 +1422,19 @@ a {
   justify-content: center;
   border: 0;
   border-radius: 14px;
-  background: var(--gold);
-  color: var(--cta-text);
+  background: var(--primary);
+  color: var(--on-primary);
+  transition: background-color 0.15s ease;
+}
+
+.question__send:active:not(:disabled) {
+  background: var(--primary-strong);
+}
+
+@media (hover: hover) {
+  .question__send:hover:not(:disabled) {
+    background: var(--primary-strong);
+  }
 }
 
 .question__send:disabled {
@@ -1131,7 +1450,12 @@ a {
   gap: 12px;
 }
 
-.live-scroll .comments {
+/* Aylanuvchi blok ichida bolalar siqilmasin (aks holda lenta va chat maydoni ustma-ust tushadi) */
+.live-scroll > * {
+  flex-shrink: 0;
+}
+
+.live-scroll .feed {
   margin: 4px 0 0;
 }
 
@@ -1146,7 +1470,7 @@ a {
   padding: 18px;
   border-radius: 20px;
   background: var(--surface);
-  border: 1px solid var(--gold);
+  border: 1px solid var(--primary);
   display: flex;
   flex-direction: column;
   gap: 14px;
@@ -1197,12 +1521,12 @@ a {
 }
 
 .tariff--checked {
-  border: 2px solid var(--gold);
+  border: 2px solid var(--primary);
   padding: 11px 13px;
 }
 
 .tariff:has(input:focus-visible) {
-  outline: 2px solid var(--gold);
+  outline: 2px solid var(--primary);
   outline-offset: 2px;
 }
 
@@ -1255,7 +1579,7 @@ a {
 .tariff__price {
   font-size: 16px;
   font-weight: 800;
-  color: var(--gold);
+  color: var(--primary);
   white-space: nowrap;
 }
 
@@ -1285,7 +1609,7 @@ a {
 .bonus__icon {
   flex-shrink: 0;
   margin-top: 1px;
-  color: var(--gold);
+  color: var(--primary);
 }
 
 .offer__deadline {
@@ -1304,7 +1628,7 @@ a {
   font-size: 15px;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
-  color: var(--gold);
+  color: var(--primary);
   white-space: nowrap;
 }
 
@@ -1329,7 +1653,7 @@ a {
   border-radius: 16px;
   background: var(--surface);
   border: 1px solid var(--line);
-  border-left: 3px solid var(--gold);
+  border-left: 3px solid var(--primary);
 }
 
 .soft-offer__row {
@@ -1356,7 +1680,7 @@ a {
 .soft-offer__price {
   font-size: 14px;
   font-weight: 800;
-  color: var(--gold);
+  color: var(--primary);
 }
 
 .soft-offer__bonus {
@@ -1368,8 +1692,8 @@ a {
 }
 
 .soft-offer .btn--outline {
-  border-color: var(--gold);
-  color: var(--gold);
+  border-color: var(--primary);
+  color: var(--primary);
 }
 
 /* Tugagan */
@@ -1426,7 +1750,7 @@ a {
   max-width: 420px;
   padding: 12px 16px;
   border-radius: 14px;
-  background: #2e271f;
+  background: var(--surface2);
   border: 1px solid var(--line);
   color: var(--text);
   font-size: 14px;
@@ -1450,7 +1774,7 @@ a {
   right: 0;
   z-index: 150;
   padding: 6px 12px;
-  background: #4a3420;
+  background: var(--line);
   color: var(--text);
   font-size: 12px;
   font-weight: 600;
@@ -1551,6 +1875,34 @@ a {
   }
 }
 
+/* ───────────── Past ekranlar (Telegram oynasi ~700 px dan past) ───────────── */
+@media (max-height: 700px) {
+  .live-head {
+    padding-top: 10px;
+    padding-bottom: 10px;
+  }
+
+  .live-info {
+    padding-top: 10px;
+    padding-bottom: 2px;
+  }
+
+  .live-info__title {
+    font-size: 17px;
+    -webkit-line-clamp: 1;
+    line-clamp: 1;
+  }
+
+  .live-info__note,
+  .soft-offer__bonus {
+    display: none;
+  }
+
+  .question {
+    padding-top: 10px;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .skeleton,
   .spinner,
@@ -1558,7 +1910,9 @@ a {
     animation: none;
   }
   .player__progress-fill,
-  .btn {
+  .btn,
+  .seg__tab,
+  .question__send {
     transition: none;
   }
 }

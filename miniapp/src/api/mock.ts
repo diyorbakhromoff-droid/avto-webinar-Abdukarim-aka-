@@ -4,72 +4,84 @@
  * holat o'zgaradi (kutish → efir → kunlar orasi → 2-kun → tugagan).
  */
 import { ApiError, type MiniApi } from './client';
-import type { AppStateResponse, FunnelBrand, LiveComment, Offer } from './types';
+import type { AppStateResponse, FunnelBrand, LiveComment, MyMessage, Offer } from './types';
 
 const SAMPLE_HLS = 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8';
 const VIDEO_SEC = 600; // namunaviy video ~10 daqiqa
 
 const funnel: FunnelBrand = {
-  course_title: 'Arab tili kursi',
+  course_title: 'Notiqlik kursi',
   webinar_title: 'Bepul webinar · 2 kun',
-  topic: "Arab tilida o'qishni noldan boshlash",
-  speaker_name: 'Nodira Rahimova',
-  speaker_title: "Arab tili o'qituvchisi, 8 yillik tajriba",
+  topic: 'Ishonch bilan gapirish: hayajonni boshqarish va fikrni aniq yetkazish',
+  speaker_name: '[Spiker ismi]',
+  speaker_title: '[Spiker haqida qisqacha: kim, nima bilan shug\'ullanadi]',
   speaker_photo_url: null,
   logo_url: null,
-  theme: { primary: '#D4AF5A', background: '#120F0B', bg_image_url: null },
+  theme: { primary: '#5B9BEF', background: '#0E1726', bg_image_url: null },
   late_entry_minutes: 15,
 };
 
 const day1Comments: LiveComment[] = [
   { t: 8, author: 'Madina', text: 'Assalomu alaykum! Kutib turgandim' },
-  { t: 20, author: 'Gulnora', text: "Vaalaykum assalom, Samarqanddan qo'shildim" },
+  { t: 20, author: 'Jasur', text: "Vaalaykum assalom, Samarqanddan qo'shildim" },
   { t: 35, author: 'Sevara', text: 'Daftar va ruchka tayyor' },
-  { t: 52, author: 'Dilnoza', text: 'Alifbodan boshlasak bo\'ladimi? Men umuman bilmayman' },
-  { t: 70, author: 'Zarina', text: 'Men ham noldanman' },
-  { t: 88, author: 'Madina', text: 'Harflar nechta ekan?' },
-  { t: 104, author: 'Feruza', text: '28 ta deyishdi' },
-  { t: 121, author: 'Sevara', text: "Harflar so'z boshida va oxirida boshqacha yozilarkan, endi tushundim" },
-  { t: 140, author: 'Kamola', text: "O'ngdan chapga yozish qiziq ekan" },
+  { t: 52, author: 'Dilnoza', text: "Ko'pchilik oldida gapirganda ovozim titraydi, shu mavzu men uchun" },
+  { t: 70, author: 'Bekzod', text: "Menda ham shunday, majlisda so'z berishsa qotib qolaman" },
+  { t: 88, author: 'Madina', text: 'Hayajonni butunlay yo\'qotish mumkinmi?' },
+  { t: 104, author: 'Feruza', text: "Hayajon tabiiy ekan, uni boshqarishni o'rganish kerak ekan" },
+  { t: 121, author: 'Sevara', text: 'Nafas mashqini sinab ko\'rdim, haqiqatan tinchlantirarkan' },
+  { t: 140, author: 'Jasur', text: 'Ishda har hafta taqdimot qilaman, juda kerakli mavzu' },
   { t: 162, author: 'Dilnoza', text: 'Rahmat, juda tushunarli tushuntiryapsiz' },
-  { t: 185, author: 'Nilufar', text: 'Uy vazifasi bo\'ladimi?' },
-  { t: 203, author: 'Gulnora', text: 'Alif, ba, ta — yozib oldim' },
-  { t: 228, author: 'Mohira', text: 'Bolalarim bilan birga ko\'ryapman' },
-  { t: 250, author: 'Zarina', text: 'Talaffuzni yana bir marta aytib bera olasizmi?' },
-  { t: 276, author: 'Feruza', text: 'Juda foydali, rahmat ustoz' },
-  { t: 300, author: 'Kamola', text: 'Endi Qur\'onni o\'zim o\'qishni xohlayman' },
-  { t: 332, author: 'Madina', text: 'Harakatlar mavzusi eng qiyini ekan' },
-  { t: 361, author: 'Nilufar', text: 'Fatha, kasra, damma — tushundim' },
+  { t: 185, author: 'Nilufar', text: "Uy vazifasi bo'ladimi?" },
+  { t: 203, author: 'Bekzod', text: "Pauza qilishdan qo'rqmaslik kerak ekan — yozib oldim" },
+  { t: 228, author: 'Mohira', text: "Ko'z bilan aloqa men uchun eng qiyini" },
+  { t: 250, author: 'Zarina', text: "Qo'llarni qayerga qo'yish kerak? Doim cho'ntakka solaman" },
+  { t: 276, author: 'Feruza', text: 'Juda foydali, rahmat' },
+  { t: 300, author: 'Kamola', text: "Nutqni bitta asosiy fikr atrofida qurish — zo'r maslahat" },
+  { t: 332, author: 'Madina', text: "Ovozimni telefonga yozib tinglab ko'raman" },
+  { t: 361, author: 'Nilufar', text: "Tinglovchiga savol berib boshlash usuli yoqdi" },
   { t: 395, author: 'Sevara', text: "Ertangi kunni ham albatta ko'raman" },
   { t: 430, author: 'Mohira', text: 'Mashq qilish uchun nima tavsiya qilasiz?' },
-  { t: 468, author: 'Gulnora', text: "Har kuni 15 daqiqa — yaxshi maslahat" },
-  { t: 505, author: 'Dilnoza', text: 'Rahmat! Ertaga ko\'rishguncha' },
+  { t: 468, author: 'Jasur', text: 'Har kuni 1 daqiqa gapirib yozib olish — sinab ko\'raman' },
+  { t: 505, author: 'Dilnoza', text: "Rahmat! Ertaga ko'rishguncha" },
   { t: 540, author: 'Feruza', text: 'Juda yoqdi' },
   { t: 575, author: 'Zarina', text: 'Ertaga soat nechada?' },
 ];
 
 const day2Comments: LiveComment[] = [
   { t: 10, author: 'Madina', text: 'Yana keldim, uy vazifasini qildim' },
-  { t: 40, author: 'Sevara', text: 'Kecha 5 ta harfni yozib chiqdim' },
-  { t: 90, author: 'Kamola', text: "So'zlarni o'qishni boshladim" },
-  { t: 150, author: 'Dilnoza', text: 'Kurs necha oy davom etadi?' },
-  { t: 210, author: 'Nilufar', text: 'Darslar qaysi vaqtda bo\'ladi?' },
-  { t: 270, author: 'Gulnora', text: "Uy vazifasi tekshirilishi juda muhim menga" },
+  { t: 40, author: 'Sevara', text: '1 daqiqalik nutqimni yozib tingladim, xatolarimni ko\'rdim' },
+  { t: 90, author: 'Bekzod', text: "Bugun majlisda birinchi marta qo'rqmay gapirdim" },
+  { t: 150, author: 'Dilnoza', text: 'Kurs necha hafta davom etadi?' },
+  { t: 210, author: 'Nilufar', text: "Amaliy mashg'ulotlar bo'ladimi?" },
+  { t: 270, author: 'Jasur', text: 'Nutqimni kimdir tekshirib berishi men uchun muhim' },
   { t: 320, author: 'Feruza', text: "Bo'lib to'lash mumkinmi?" },
   { t: 360, author: 'Mohira', text: 'Men Standart tarifni tanladim' },
-  { t: 420, author: 'Zarina', text: 'Bonuslar ham bor ekan, zo\'r' },
+  { t: 420, author: 'Zarina', text: "Bonuslar ham bor ekan" },
   { t: 480, author: 'Madina', text: 'Yozildim, rahmat!' },
-  { t: 540, author: 'Sevara', text: 'Kursda ko\'rishguncha' },
+  { t: 540, author: 'Sevara', text: "Kursda ko'rishguncha" },
+];
+
+/** Efir chati namunasi: bittasiga jamoa javob bergan, bittasi javob kutmoqda. */
+const sampleMyMessages: MyMessage[] = [
+  {
+    id: 9001,
+    t: 58,
+    text: "Ko'pchilik oldida ovozim titraydi. Buni qanday to'xtatsa bo'ladi?",
+    answer:
+      "Gapirishdan oldin sekin nafas oling: 4 soniya olib, 4 soniya chiqaring. 2-kunda bu mashqni batafsil ko'rib chiqamiz.",
+  },
+  { id: 9002, t: 86, text: 'Mashq uchun kuniga qancha vaqt ajratish kerak?', answer: null },
 ];
 
 function makeOffer(over: Partial<Offer> = {}): Offer {
   return {
-    course_title: 'Arab tili: 3 oylik kurs',
+    course_title: 'Notiqlik kursi',
     tariffs: [
       {
         id: 1,
         name: 'Standart',
-        description: 'Darslar + uy vazifasi tekshiruvi',
+        description: 'Video darslar + amaliy topshiriqlar tekshiruvi',
         special_price: 1_490_000,
         regular_price: 1_990_000,
         price_now: 1_490_000,
@@ -78,14 +90,14 @@ function makeOffer(over: Partial<Offer> = {}): Offer {
       {
         id: 2,
         name: 'VIP',
-        description: "+ shaxsiy kurator va savol-javob sessiyalari",
+        description: "+ shaxsiy kurator va nutqingiz tahlili",
         special_price: 2_490_000,
         regular_price: 3_290_000,
         price_now: 2_490_000,
         deposit_amount: 100_000,
       },
     ],
-    bonuses: ["Arab alifbosi bo'yicha PDF qo'llanma", "Tajvid asoslari — 5 ta qo'shimcha video dars"],
+    bonuses: ['[1-bonus nomi]', '[2-bonus nomi]'],
     deadline_at: null,
     special_active: true,
     closed: false,
@@ -94,6 +106,12 @@ function makeOffer(over: Partial<Offer> = {}): Offer {
     ...over,
   };
 }
+
+const DAY1_SUMMARY = [
+  "Hayajon — tabiiy holat; uni nafas bilan boshqarish mumkin",
+  'Nutqni bitta asosiy fikr atrofida quring',
+  "Uy vazifasi: 1 daqiqalik nutqni telefonga yozib, qayta tinglang",
+];
 
 const iso = (ms: number) => new Date(ms).toISOString();
 const H = 3_600_000;
@@ -125,7 +143,13 @@ function session(day1: number, canChange = true) {
   return { id: 101, day1_at: iso(day1), day2_at: iso(day1 + 24 * H), can_change: canChange };
 }
 
-function liveFixture(now: number, day: 1 | 2, startMs: number, offer: Offer | null): AppStateResponse {
+function liveFixture(
+  now: number,
+  day: 1 | 2,
+  startMs: number,
+  offer: Offer | null,
+  myMessages: MyMessage[] = [],
+): AppStateResponse {
   const day1 = day === 1 ? startMs : startMs - 24 * H;
   return {
     ...base(now),
@@ -137,6 +161,7 @@ function liveFixture(now: number, day: 1 | 2, startMs: number, offer: Offer | nu
       duration_sec: VIDEO_SEC,
       hls_url: SAMPLE_HLS,
       comments: day === 1 ? day1Comments : day2Comments,
+      my_messages: myMessages,
     },
     offer,
   };
@@ -189,6 +214,11 @@ export const MOCK_SCENARIOS: MockScenario[] = [
     build: (now) => liveFixture(now, 1, now - 95_000, null),
   },
   {
+    key: 'live1_chat',
+    label: 'live — 1-kun, efir chatida xabarlar',
+    build: (now) => liveFixture(now, 1, now - 140_000, null, sampleMyMessages),
+  },
+  {
     key: 'live1_soft',
     label: 'live — 1-kun, yumshoq taklif',
     build: (now) => {
@@ -217,11 +247,7 @@ export const MOCK_SCENARIOS: MockScenario[] = [
         between: {
           day1_percent: 92,
           day2_at: iso(day2),
-          summary: [
-            "Arab alifbosi 28 harfdan iborat, o'ngdan chapga yoziladi",
-            "Harf so'zdagi o'rniga qarab 4 xil shaklda yoziladi",
-            'Uy vazifasi: 5 ta harfni daftarga 10 martadan yozing',
-          ],
+          summary: DAY1_SUMMARY,
         },
       };
     },
@@ -335,7 +361,7 @@ function advance(s: AppStateResponse, now: number): AppStateResponse {
           between: {
             day1_percent: 88,
             day2_at: iso(start + 24 * H),
-            summary: ["Arab alifbosi 28 harfdan iborat, o'ngdan chapga yoziladi"],
+            summary: DAY1_SUMMARY.slice(0, 1),
           },
         };
       } else {
@@ -387,6 +413,14 @@ export const mockApi: MiniApi = {
   async question(text) {
     console.info('[mock] POST /api/app/question', { text });
     await delay(500);
+    if (text.trim().toLowerCase() === 'xato') throw new ApiError(500, 'mock error'); // xato holatini tekshirish
+    // Backend kabi: efir davom etayotgan bo'lsa, videoning soniyasi bilan saqlanadi
+    if (current && !('error' in current) && current.state === 'live' && current.live) {
+      const live = current.live;
+      const t = Math.max(0, Math.floor((Date.now() - Date.parse(live.start_at)) / 1000));
+      const id = live.my_messages.reduce((m, x) => Math.max(m, x.id), 9100) + 1;
+      current = { ...current, live: { ...live, my_messages: [...live.my_messages, { id, t, text: text.trim(), answer: null }] } };
+    }
     return { ok: true };
   },
   async offerClick(tariff_id) {

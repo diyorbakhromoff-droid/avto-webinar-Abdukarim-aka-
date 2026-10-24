@@ -1,10 +1,13 @@
-import { useCallback, useRef } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import type { AppStateResponse, LiveInfo, SessionInfo } from '../api/types';
-import { Comments } from '../components/Comments';
+import { LiveFeed, type FeedTab } from '../components/LiveFeed';
 import { OfferBlock, SoftOfferBanner, useSelectedTariff } from '../components/OfferBlock';
 import { Player } from '../components/Player';
 import { QuestionBox } from '../components/QuestionBox';
+import { toast } from '../components/Toast';
+import { useLiveChat } from '../lib/chat';
 import { useBotAction, useServerNow } from '../lib/hooks';
+import { haptic } from '../lib/telegram';
 import { formatClock, formatVideoTime, toMs } from '../lib/time';
 
 interface Props {
@@ -27,6 +30,28 @@ export function Live({ data, live, session, onRefresh }: Props) {
 
   const [selectedId, setSelectedId] = useSelectedTariff(offer);
   const { busy, offerClick } = useBotAction();
+
+  // ── Efir chati ──
+  const [tab, setTab] = useState<FeedTab>('comments');
+  const chat = useLiveChat(live.my_messages);
+  const posRef = useRef(pos);
+  posRef.current = pos;
+  const sendChat = chat.send;
+  const handleSend = useCallback(
+    async (text: string) => {
+      setTab('mine');
+      const ok = await sendChat(text, Math.floor(posRef.current));
+      if (ok) {
+        haptic('success');
+        toast('Xabaringiz yuborildi — javob shu yerda va botda keladi');
+        onRefresh(); // server ro'yxati (id bilan) tezroq kelsin
+      } else {
+        haptic('error');
+      }
+      return ok;
+    },
+    [sendChat, onRefresh],
+  );
 
   // Video tugadi → holatni qayta so'rash (server hali "live" desa, 5 s da bir)
   const lastEndAsk = useRef(0);
@@ -78,8 +103,16 @@ export function Live({ data, live, session, onRefresh }: Props) {
         <div className="live-scroll">
           <h1 className="sr-only">{data.funnel.topic}</h1>
           <OfferBlock offer={offer} selectedId={selectedId} onSelect={setSelectedId} onDeadline={onRefresh} />
-          <Comments key="comments" comments={live.comments} positionSec={pos} variant="boxed" />
-          <QuestionBox key="question" />
+          <LiveFeed
+            key="feed"
+            comments={live.comments}
+            positionSec={pos}
+            chat={chat.items}
+            tab={tab}
+            onTab={setTab}
+            variant="boxed"
+          />
+          <QuestionBox key="question" onSend={handleSend} />
         </div>
         {!offer.closed && offer.tariffs.length > 0 && (
           <div className="sticky-cta">
@@ -112,8 +145,16 @@ export function Live({ data, live, session, onRefresh }: Props) {
           onClick={() => offerClick(offer.tariffs.length === 1 ? offer.tariffs[0].id : null)}
         />
       )}
-      <Comments key="comments" comments={live.comments} positionSec={pos} variant="fill" />
-      <QuestionBox key="question" />
+      <LiveFeed
+        key="feed"
+        comments={live.comments}
+        positionSec={pos}
+        chat={chat.items}
+        tab={tab}
+        onTab={setTab}
+        variant="fill"
+      />
+      <QuestionBox key="question" onSend={handleSend} />
     </main>
   );
 }
