@@ -2,7 +2,7 @@ import type { Role } from '../api/types';
 
 export type SectionKey =
   | 'dashboard' | 'funnels' | 'video' | 'slots' | 'chain' | 'sales' | 'comments'
-  | 'leads' | 'questions' | 'payments' | 'broadcasts' | 'stats' | 'settings';
+  | 'leads' | 'questions' | 'chat' | 'payments' | 'broadcasts' | 'stats' | 'settings';
 
 export interface Section { key: SectionKey; path: string; label: string; roles: Role[] }
 
@@ -20,6 +20,7 @@ export const SECTIONS: Section[] = [
   { key: 'comments', path: '/comments', label: 'Izohlar', roles: CONTENT },
   { key: 'leads', path: '/leads', label: 'Lidlar', roles: SALES },
   { key: 'questions', path: '/questions', label: 'Savollar', roles: SALES },
+  { key: 'chat', path: '/chat', label: 'Efir chati', roles: ALL },
   { key: 'payments', path: '/payments', label: "To'lovlar", roles: SALES },
   { key: 'broadcasts', path: '/broadcasts', label: 'Ommaviy xabar', roles: CONTENT },
   { key: 'stats', path: '/stats', label: 'Statistika', roles: ALL },

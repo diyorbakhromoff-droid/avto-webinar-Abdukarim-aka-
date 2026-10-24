@@ -70,14 +70,26 @@ export interface TariffAdmin {
 export type ChainKind = 'text' | 'photo' | 'video' | 'video_note' | 'voice' | 'audio' | 'document' | 'album';
 export type TriggerType =
   | 'after_registration'
-  | 'before_day'
-  | 'at_day_start'
-  | 'after_day_end'
+  | 'before_day'         // 1-kun yoki 2-kundan X oldin
+  | 'at_day_start'       // kun boshlanishida (+X daqiqa)
+  | 'after_day_end'      // kun tugaganidan X keyin
+  | 'left_live'          // efir davomida chiqib ketgandan X keyin (trigger_day — qaysi kun; qaytsa bekor bo'ladi)
+  | 'before_deadline'    // shaxsiy deadline tugashidan X oldin
   | 'on_button'
   | 'stuck';
 export type Segment =
-  | 'all' | 'day1_attended' | 'day1_missed' | 'day2_attended' | 'day2_missed'
-  | 'reached_offer' | 'left_before_offer' | 'receipt_sent' | 'deposit_paid' | 'full_paid' | 'not_paid';
+  | 'all'
+  // video ko'rish bo'yicha — segment_day (1|2) kerak, *_min uchun segment_minute ham
+  | 'not_joined'        // efirga kirmaganlar
+  | 'reached_min'       // videoning X-daqiqasigacha ko'rganlar
+  | 'left_before_min'   // kirgan, lekin X-daqiqaga yetmay chiqib ketganlar
+  | 'watched_full'      // oxirigacha (95%) ko'rganlar
+  | 'not_full'          // kirgan, lekin oxirigacha ko'rmaganlar
+  // kun natijasi
+  | 'day1_attended' | 'day1_missed' | 'day2_attended' | 'day2_missed'
+  | 'reached_offer' | 'left_before_offer'
+  // to'lov
+  | 'receipt_sent' | 'deposit_paid' | 'full_paid' | 'not_paid';
 export type StuckStep = 'no_phone' | 'no_session' | 'no_receipt' | 'receipt_rejected';
 export type ButtonType = 'url' | 'webapp' | 'reschedule' | 'pay';
 export interface ChainButton { type: ButtonType; text: string; url?: string }
@@ -95,6 +107,8 @@ export interface ChainMessage {
   stuck_step: StuckStep | null;
   button_key: string | null;
   segment: Segment;
+  segment_day: 1 | 2 | null;     // ko'rish segmentlari: qaysi kun videosi (bo'sh bo'lsa trigger_day)
+  segment_minute: number | null; // reached_min / left_before_min: X-daqiqa
   required: boolean;
   status: 'active' | 'draft';
   sort: number;
@@ -193,7 +207,32 @@ export interface PaymentRow {
 // POST /api/admin/payments/{id}/refund -> PaymentRow
 export const REJECT_REASONS = ["Summa mos emas", "Chek o'qilmaydi", "To'lov topilmadi", "Boshqa sabab"];
 
-// ── Savollar ──
+// ── Tomosha statistikasi (har N daqiqada) ──
+// GET /api/admin/funnels/{id}/watch-stats?day=1&step=5&date_from&date_to&source&slot -> WatchStats
+export interface WatchStats {
+  day: 1 | 2; step: number; duration_min: number; offer_min: number | null;
+  joined: number;          // efirga kirganlar
+  avg_watch_min: number;   // o'rtacha necha daqiqa ko'rdi
+  full: number;            // oxirigacha ko'rganlar
+  buckets: WatchBucket[];
+  top_drops: { from_minute: number; to_minute: number; left: number }[];  // eng ko'p chiqib ketilgan 3 oraliq
+}
+/** minute — videoning daqiqasi; viewers — shu daqiqada ko'rib turganlar; share — kirganlarga nisbatan 0..1;
+ *  drop — oldingi nuqtadan kamayish (0..1); left — oraliqda chiqib ketganlar. */
+export interface WatchBucket { minute: number; viewers: number; share: number; drop: number; left: number }
+
+// ── Efir chati (Mini App'da efir davomida yozilganlar) ──
+export interface ChatRow {
+  id: number; lead_id: number; lead_name: string; lead_phone: string | null; // kontent menejerga telefon null
+  text: string; day: 1 | 2 | null; video_sec: number | null;  // videoning qaysi soniyasida yozilgan
+  session_at: string | null;  // shu kun efirining boshlanish vaqti
+  created_at: string; answer: string | null; answered_at: string | null; answered_by: string | null;
+}
+// GET  /api/admin/chat?funnel_id&date=YYYY-MM-DD&day=1|2&status=all|unanswered -> ChatRow[]  (barcha rollar)
+// GET  /api/admin/chat/sessions?funnel_id -> ChatSession[]
+// POST /api/admin/chat/{id}/reply {text} -> ChatRow   (javob lidga bot orqali boradi)
+
+// ── Savollar (botdagi "Savol berish" — efirdan keyin) ──
 export interface QuestionRow { id: number; lead_id: number; lead_name: string; text: string; source: 'miniapp' | 'bot'; created_at: string; answer: string | null; answered_at: string | null }
 // GET  /api/admin/questions?funnel_id&answered=false -> QuestionRow[]
 // POST /api/admin/questions/{id}/answer {text}
@@ -209,7 +248,7 @@ export interface DashboardResponse {
   kpis: { start: number; phone: number; day1_watched: number; full_paid: number; deposit_paid: number; cost_per_sale: number | null };
   funnel: { label: string; n: number; rate: number | null }[];
   upcoming: { at: string; day1_count: number; day2_count: number }[];
-  pending_receipts: number; unanswered_questions: number; failed_messages: number;
+  pending_receipts: number; unanswered_questions: number; unanswered_chat: number; failed_messages: number;
 }
 // GET /api/admin/dashboard?funnel_id&period=today|7d|30d
 
@@ -252,3 +291,6 @@ export interface AuditRow { at: string; user: string; action: string; details: s
 export interface FailedMessage { id: number; lead_name: string; title: string; error: string; at: string }
 export type PaymentsStatusFilter = 'pending' | 'approved' | 'rejected' | 'all';
 export type DashboardPeriod = 'today' | '7d' | '30d';
+/** GET /api/admin/chat/sessions elementi. */
+export interface ChatSession { day: 1 | 2; at: string; count: number; unanswered: number }
+export type ChatStatusFilter = 'all' | 'unanswered';

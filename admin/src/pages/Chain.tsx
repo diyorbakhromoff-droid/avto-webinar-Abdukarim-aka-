@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { api } from '../api/admin';
+import { ApiError } from '../api/errors';
 import type {
-  ChainHistoryEntry, ChainKind, ChainMessage, ChainMessageInput, MediaInfo, Segment, SimulationRow, StuckStep, TriggerType,
+  ChainHistoryEntry, ChainKind, ChainMessage, ChainMessageInput, FunnelSettings, MediaInfo, Segment, SimulationRow, StuckStep, TriggerType,
 } from '../api/types';
 import { ButtonsEditor, cleanButtons, validateButtons } from '../components/ButtonsEditor';
 import { MediaPicker } from '../components/MediaPicker';
@@ -9,16 +11,19 @@ import { Modal } from '../components/Modal';
 import { NeedFunnel } from '../components/NeedFunnel';
 import { TelegramPreview } from '../components/TelegramPreview';
 import { TextEditor } from '../components/TextEditor';
+import { WatchStatsPanel } from '../components/WatchStatsPanel';
 import { NumberInput } from '../components/fields';
 import { Badge, Empty, ErrorBox, Loading, PageHead } from '../components/ui';
 import {
-  OFFSET_LABEL, PHASES, defaultsForPhase, metaLabel, needsDay, normalize, phaseOf, sortChain, textLimit, toInput, whenLabel,
-  type PhaseKey,
+  DEFAULT_OFFSET, MAIN_TRIGGERS, PHASES, SPECIAL_TRIGGERS, defaultsForPhase, isSpecialTrigger, leftBeforeDraft, metaLabel,
+  needsDay, normalize, phaseOf, ruleSentence, segmentDayOf, sortChain, textLimit, toInput, whenLabel, type PhaseKey,
 } from '../lib/chain';
 import { useConfirm } from '../lib/confirm';
 import { num, splitOffset, UNIT_LABEL, UNIT_MIN, type OffsetUnit } from '../lib/format';
 import { honestyHits } from '../lib/honesty';
-import { KIND_LABEL, SEGMENT_LABEL, STUCK_LABEL, TRIGGER_LABEL, options } from '../lib/labels';
+import {
+  KIND_LABEL, SEGMENT_GROUPS, SEGMENT_LABEL, STUCK_LABEL, TRIGGER_LABEL, isMinuteSegment, isWatchSegment, options,
+} from '../lib/labels';
 import { slotOptions } from '../lib/slots';
 import { visibleLength } from '../lib/telegramHtml';
 import { dayLabel, fmtDateTime, fmtTime, fromLocalInput, toLocalInput } from '../lib/time';
@@ -26,30 +31,107 @@ import { useToast } from '../lib/toast';
 import { useLoad } from '../lib/useLoad';
 
 type Selected = { id: number } | { id: 'new' } | null;
+type Patch = (p: Partial<ChainMessageInput>) => void;
 
-function OffsetInput({ minutes, onChange, label }: { minutes: number; onChange: (m: number) => void; label: string }) {
-  const init = splitOffset(minutes);
-  const [unit, setUnit] = useState<OffsetUnit>(init.unit);
+// ───────────── kichik maydonlar ─────────────
+
+/** Son + birlik (daqiqa/soat/kun) → daqiqa. `after` — keyingi so'z ("oldin"/"keyin"). */
+function OffsetInput({ minutes, onChange, ariaLabel, after }: { minutes: number; onChange: (m: number) => void; ariaLabel: string; after?: string }) {
+  const [unit, setUnit] = useState<OffsetUnit>(() => splitOffset(minutes).unit);
+  const internal = useRef(false);
   useEffect(() => {
-    // Tashqaridan o'zgarsa (boshqa xabar tanlansa) birlikni qayta hisoblaymiz
-    if (minutes % UNIT_MIN[unit] !== 0) setUnit(splitOffset(minutes).unit);
+    // Tashqaridan o'zgarsa (boshqa xabar yoki trigger tanlansa) birlikni qayta tanlaymiz
+    if (internal.current) {
+      internal.current = false;
+      if (minutes % UNIT_MIN[unit] === 0) return;
+    }
+    setUnit(splitOffset(minutes).unit);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [minutes]);
   const value = minutes / UNIT_MIN[unit];
   return (
-    <div className="field">
-      <span>{label}</span>
-      <div className="offset-input">
-        <NumberInput value={Number.isInteger(value) ? value : Number(value.toFixed(2))} min={0} onChange={(n) => onChange(Math.max(0, Math.round(n * UNIT_MIN[unit])))} ariaLabel={`${label} — qiymat`} />
-        <select className="select" value={unit} aria-label={`${label} — birlik`} onChange={(e) => setUnit(e.target.value as OffsetUnit)}>
-          {(Object.keys(UNIT_LABEL) as OffsetUnit[]).map((u) => <option key={u} value={u}>{UNIT_LABEL[u]}</option>)}
-        </select>
-      </div>
+    <div className="offset-input">
+      <NumberInput
+        value={Number.isInteger(value) ? value : Number(value.toFixed(2))}
+        min={0}
+        onChange={(n) => { internal.current = true; onChange(Math.max(0, Math.round(n * UNIT_MIN[unit]))); }}
+        ariaLabel={`${ariaLabel} — son`}
+      />
+      <select className="select" value={unit} aria-label={`${ariaLabel} — birlik`} onChange={(e) => setUnit(e.target.value as OffsetUnit)}>
+        {(Object.keys(UNIT_LABEL) as OffsetUnit[]).map((u) => <option key={u} value={u}>{UNIT_LABEL[u]}</option>)}
+      </select>
+      {after && <span className="offset-after">{after}</span>}
     </div>
   );
 }
 
-function validate(m: ChainMessageInput): string[] {
+function DayToggle({ value, onChange, label }: { value: 1 | 2; onChange: (d: 1 | 2) => void; label: string }) {
+  return (
+    <div className="segmented day-toggle" role="group" aria-label={label}>
+      {([1, 2] as const).map((d) => (
+        <button key={d} type="button" className={value === d ? 'seg seg-on' : 'seg'} aria-pressed={value === d} onClick={() => onChange(d)}>{d}-kun</button>
+      ))}
+    </div>
+  );
+}
+
+/** Videoning daqiqasi: bo'sh bo'lishi mumkin (null). */
+function MinuteInput({ value, onChange, max }: { value: number | null; onChange: (n: number | null) => void; max?: number }) {
+  const [text, setText] = useState(value === null ? '' : String(value));
+  useEffect(() => {
+    const cur = text === '' ? null : parseInt(text, 10);
+    if (cur !== value) setText(value === null ? '' : String(value));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value]);
+  return (
+    <div className="input-suffix minute-input">
+      <input
+        className={value === null ? 'input input-bad' : 'input'}
+        type="number"
+        inputMode="numeric"
+        min={1}
+        max={max}
+        value={text}
+        placeholder="40"
+        aria-label="Videoning daqiqasi"
+        onChange={(e) => {
+          setText(e.target.value);
+          const n = parseInt(e.target.value, 10);
+          onChange(Number.isFinite(n) && n > 0 ? n : null);
+        }}
+      />
+      <span>-daqiqa</span>
+    </div>
+  );
+}
+
+function Chevron({ open }: { open: boolean }) {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" style={{ transform: open ? 'rotate(90deg)' : undefined, transition: 'transform .15s', flex: '0 0 auto' }}>
+      <path d="M9 6l6 6-6 6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+// ───────────── yordamchilar ─────────────
+
+/** Video segmenti trigger kuniga "ergashib" turgan bo'lsa, trigger kuni bilan birga o'zgaradi. */
+function followSegDay(f: ChainMessageInput, newTriggerDay: 1 | 2 | null): 1 | 2 | null {
+  if (!isWatchSegment(f.segment)) return f.segment_day;
+  const following = f.segment_day === null || f.segment_day === f.trigger_day;
+  if (!following) return f.segment_day;
+  return newTriggerDay ?? f.segment_day ?? f.trigger_day ?? null;
+}
+
+const capitalize = (s: string) => (s ? s[0].toUpperCase() + s.slice(1) : s);
+const segOptionLabel = (s: Segment) => SEGMENT_LABEL[s].replace('X', '__');
+
+function videoMinutes(s: FunnelSettings | undefined, day: 1 | 2): number | null {
+  if (!s) return null;
+  return Math.round((day === 2 ? s.day2_duration_sec : s.day1_duration_sec) / 60) || null;
+}
+
+function validate(m: ChainMessageInput, settings?: FunnelSettings): string[] {
   const errs: string[] = [];
   if (!m.title.trim()) errs.push('Ichki nomini kiriting.');
   if (m.kind === 'text' && !m.text.trim()) errs.push("Matn bo'sh bo'lmasin.");
@@ -59,22 +141,223 @@ function validate(m: ChainMessageInput): string[] {
   if (m.kind === 'album' && m.buttons.length > 0) errs.push("Albomga tugma qo'shib bo'lmaydi (Telegram cheklovi).");
   if (m.trigger_type === 'on_button' && !(m.button_key ?? '').trim()) errs.push('Tugma kalitini kiriting.');
   if (m.offset_minutes < 0) errs.push("Vaqt manfiy bo'lmasin.");
+  if (isMinuteSegment(m.segment)) {
+    const d = segmentDayOf(m);
+    const dur = videoMinutes(settings, d);
+    if (!m.segment_minute || m.segment_minute <= 0) errs.push('«Kimga yuboriladi?»: videoning daqiqasini kiriting.');
+    else if (dur && m.segment_minute > dur) errs.push(`${d}-kun videosi ${dur} daqiqa — daqiqa shundan oshmasin.`);
+  }
   const b = validateButtons(m.buttons);
   if (b) errs.push(b);
   return errs;
 }
 
-function fmtVal(v: unknown): string {
+// ───────────── "Qachon yuboriladi?" ─────────────
+
+function WhenPicker({ form, patch, settings, onOpenAdvanced }: { form: ChainMessageInput; patch: Patch; settings?: FunnelSettings; onOpenAdvanced: () => void }) {
+  const t = form.trigger_type;
+  const special = isSpecialTrigger(t);
+  const main = MAIN_TRIGGERS.find((x) => x.value === t);
+
+  const setTrigger = (next: TriggerType) => {
+    const day = needsDay(next) ? (form.trigger_day ?? 1) : null;
+    patch({
+      trigger_type: next,
+      trigger_day: day,
+      stuck_step: null,
+      button_key: null,
+      offset_minutes: next === t ? form.offset_minutes : DEFAULT_OFFSET[next],
+      segment_day: followSegDay(form, day),
+    });
+  };
+  const setDay = (d: 1 | 2) => patch({ trigger_day: d, segment_day: followSegDay(form, d) });
+
+  let hint: string | null = null;
+  if (t === 'left_live') hint = "Lid efirni yopib chiqib ketgandan keyin yuboriladi. Shu vaqt ichida efirga qaytib kirsa — xabar bekor bo'ladi.";
+  if (t === 'before_deadline') hint = `Deadline — 2-kun efiri tugagach ${settings?.deadline_hours ?? 'D'} soat (lid kartasida uzaytirilsa, xabar ham suriladi).`;
+  if (t === 'at_day_start') hint = '0 — efir boshlanishi bilan.';
+  if (t === 'after_registration') hint = "0 — ro'yxatdan o'tishi bilan darhol.";
+
+  return (
+    <fieldset className="picker">
+      <legend className="picker-title"><span className="picker-n" aria-hidden="true">1</span>Qachon yuboriladi?</legend>
+      <div className="picker-row">
+        <select className="select picker-select" aria-label="Qachon yuboriladi" value={special ? 'special' : t} onChange={(e) => {
+          if (e.target.value !== 'special') setTrigger(e.target.value as TriggerType);
+        }}>
+          {MAIN_TRIGGERS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+          {special && <option value="special">{TRIGGER_LABEL[t]} (qo'shimcha sozlamalarda)</option>}
+        </select>
+        {!special && main && <OffsetInput minutes={form.offset_minutes} onChange={(m) => patch({ offset_minutes: m })} ariaLabel="Qancha vaqt" after={main.after} />}
+        {!special && needsDay(t) && <DayToggle value={form.trigger_day ?? 1} onChange={setDay} label="Qaysi kun efiri" />}
+      </div>
+      {special ? (
+        <div className="field-hint">
+          Bu xabar maxsus holatda yuboriladi — <button type="button" className="link-btn" onClick={onOpenAdvanced}>«Qo'shimcha sozlamalar»da o'zgartirish</button>.
+          Oddiy vaqtga o'tkazish uchun yuqoridan tanlang.
+        </div>
+      ) : hint ? <div className="field-hint">{hint}</div> : null}
+    </fieldset>
+  );
+}
+
+// ───────────── "Kimga yuboriladi?" ─────────────
+
+function AudiencePicker({ form, patch, settings }: { form: ChainMessageInput; patch: Patch; settings?: FunnelSettings }) {
+  const seg = form.segment;
+  const watch = isWatchSegment(seg);
+  const minute = isMinuteSegment(seg);
+  const d = segmentDayOf(form);
+  const dur = videoMinutes(settings, d);
+
+  const setSegment = (s: Segment) => patch({
+    segment: s,
+    segment_day: isWatchSegment(s) ? (form.segment_day ?? form.trigger_day ?? 1) : null,
+    segment_minute: isMinuteSegment(s) ? form.segment_minute : null,
+  });
+
+  return (
+    <fieldset className="picker">
+      <legend className="picker-title"><span className="picker-n" aria-hidden="true">2</span>Kimga yuboriladi?</legend>
+      <div className="picker-row">
+        <select className="select picker-select" aria-label="Kimga yuboriladi" value={seg} onChange={(e) => setSegment(e.target.value as Segment)}>
+          {SEGMENT_GROUPS.map((g) => (g.label ? (
+            <optgroup key={g.label} label={g.label}>
+              {g.items.map((s) => <option key={s} value={s}>{segOptionLabel(s)}</option>)}
+            </optgroup>
+          ) : g.items.map((s) => <option key={s} value={s}>{segOptionLabel(s)}</option>)))}
+        </select>
+        {watch && <DayToggle value={d} onChange={(x) => patch({ segment_day: x })} label="Qaysi kun videosi" />}
+        {minute && <MinuteInput value={form.segment_minute} onChange={(n) => patch({ segment_minute: n })} max={dur ?? undefined} />}
+      </div>
+      {watch && (
+        <div className="field-hint">
+          {d}-kun videosi bo'yicha{dur ? ` (video ${dur} daqiqa)` : ''}.
+          {seg === 'watched_full' || seg === 'not_full' ? ' «Oxirigacha» — videoning 95% qismini ko\'rgan.' : ''}
+          {needsDay(form.trigger_type) && form.trigger_day !== d ? ` Diqqat: xabar ${form.trigger_day}-kunga bog'langan, auditoriya esa ${d}-kun videosi bo'yicha.` : ''}
+        </div>
+      )}
+    </fieldset>
+  );
+}
+
+// ───────────── Qo'shimcha sozlamalar ─────────────
+
+function AdvancedSection({ open, onToggle, form, patch }: { open: boolean; onToggle: () => void; form: ChainMessageInput; patch: Patch }) {
+  const special = isSpecialTrigger(form.trigger_type);
+  const summary = [
+    form.required ? 'majburiy' : null,
+    form.status === 'active' ? 'faol' : 'qoralama',
+    `tartib ${form.sort}`,
+    special ? TRIGGER_LABEL[form.trigger_type].toLowerCase() : null,
+  ].filter(Boolean).join(' · ');
+
+  const setSpecial = (v: TriggerType | '') => {
+    if (!v) {
+      patch({ trigger_type: 'after_registration', trigger_day: null, stuck_step: null, button_key: null, offset_minutes: DEFAULT_OFFSET.after_registration, segment_day: followSegDay(form, null) });
+      return;
+    }
+    patch({
+      trigger_type: v, trigger_day: null,
+      stuck_step: v === 'stuck' ? form.stuck_step ?? 'no_session' : null,
+      button_key: v === 'on_button' ? form.button_key ?? '' : null,
+      offset_minutes: v === form.trigger_type ? form.offset_minutes : DEFAULT_OFFSET[v],
+      segment_day: followSegDay(form, null),
+    });
+  };
+
+  return (
+    <div className={open ? 'adv adv-open' : 'adv'}>
+      <button type="button" className="adv-toggle" aria-expanded={open} aria-controls="chain-adv" onClick={onToggle}>
+        <Chevron open={open} />
+        <span className="adv-title">Qo'shimcha sozlamalar</span>
+        <span className="adv-summary">{summary}</span>
+      </button>
+      {open && (
+        <div id="chain-adv" className="adv-body">
+          <div className="stack-sm" style={{ gap: 2 }}>
+            <label className="check">
+              <input type="checkbox" checked={form.required} onChange={(e) => patch({ required: e.target.checked })} />
+              Majburiy (siqish)
+            </label>
+            <div className="field-hint">Lid efirga yaqin qolib ro'yxatdan o'tsa, oddiy xabar o'tkazib yuboriladi, majburiy xabar esa qolgan vaqtga siqib yuboriladi.</div>
+          </div>
+
+          <div className="adv-grid">
+            <div className="field">
+              <span>Holat</span>
+              <div className="segmented" role="group" aria-label="Holat">
+                {(['active', 'draft'] as const).map((s) => (
+                  <button key={s} type="button" className={form.status === s ? 'seg seg-on' : 'seg'} aria-pressed={form.status === s} onClick={() => patch({ status: s })}>
+                    {s === 'active' ? 'Faol' : 'Qoralama'}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <label className="field">
+              <span>Tartib raqami</span>
+              <NumberInput value={form.sort} min={0} onChange={(n) => patch({ sort: Math.round(n) })} />
+              <span className="field-hint">Bir vaqtga tushgan xabarlar shu tartibda ketadi.</span>
+            </label>
+          </div>
+
+          <label className="field">
+            <span>Maxsus holatda yuborish</span>
+            <select className="select" value={special ? form.trigger_type : ''} onChange={(e) => setSpecial(e.target.value as TriggerType | '')}>
+              <option value="">Yo'q — «Qachon yuboriladi?» bo'yicha</option>
+              {SPECIAL_TRIGGERS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+          </label>
+          {form.trigger_type === 'stuck' && (
+            <div className="picker-row">
+              <label className="field" style={{ flex: '1 1 220px' }}>
+                <span>Qaysi holatda</span>
+                <select className="select" value={form.stuck_step ?? 'no_session'} onChange={(e) => patch({ stuck_step: e.target.value as StuckStep })}>
+                  {options(STUCK_LABEL).map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+              </label>
+              <div className="field" style={{ flex: '1 1 240px' }}>
+                <span>Qancha vaqt to'xtab qolsa</span>
+                <OffsetInput minutes={form.offset_minutes} onChange={(m) => patch({ offset_minutes: m })} ariaLabel="To'xtab qolish vaqti" />
+              </div>
+            </div>
+          )}
+          {form.trigger_type === 'on_button' && (
+            <div className="picker-row">
+              <label className="field" style={{ flex: '1 1 200px' }}>
+                <span>Tugma kaliti</span>
+                <input className="input mono" value={form.button_key ?? ''} onChange={(e) => patch({ button_key: e.target.value.replace(/[^\w-]/g, '') })} placeholder="homework" />
+              </label>
+              <div className="field" style={{ flex: '1 1 240px' }}>
+                <span>Bosilgandan keyin</span>
+                <OffsetInput minutes={form.offset_minutes} onChange={(m) => patch({ offset_minutes: m })} ariaLabel="Tugma bosilgandan keyin" after="keyin" />
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ───────────── tarix va sinov ─────────────
+
+const FIELD_LABEL: Record<string, string> = {
+  title: 'Nomi', kind: 'Turi', text: 'Matn', media_ids: 'Media', buttons: 'Tugmalar', trigger_type: 'Qachon', trigger_day: 'Kun',
+  offset_minutes: 'Vaqt (daq)', stuck_step: 'Qadam', button_key: 'Tugma kaliti', segment: 'Kimga', segment_day: 'Video kuni',
+  segment_minute: 'Video daqiqasi', required: 'Majburiy', status: 'Holat', sort: 'Tartib',
+};
+
+function fmtVal(key: string, v: unknown): string {
   if (v === null || v === undefined || v === '') return '—';
+  if (key === 'trigger_type' && typeof v === 'string') return TRIGGER_LABEL[v as TriggerType] ?? v;
+  if (key === 'segment' && typeof v === 'string') return SEGMENT_LABEL[v as Segment] ?? v;
+  if (key === 'status') return v === 'active' ? 'faol' : 'qoralama';
+  if (typeof v === 'boolean') return v ? 'ha' : "yo'q";
   if (typeof v === 'string') return v.length > 160 ? `${v.slice(0, 160)}…` : v;
   const s = JSON.stringify(v);
   return s.length > 160 ? `${s.slice(0, 160)}…` : s;
 }
-
-const FIELD_LABEL: Record<string, string> = {
-  title: 'Nomi', kind: 'Turi', text: 'Matn', media_ids: 'Media', buttons: 'Tugmalar', trigger_type: 'Trigger', trigger_day: 'Kun',
-  offset_minutes: 'Vaqt (daq)', stuck_step: 'Qadam', button_key: 'Tugma kaliti', segment: 'Segment', required: 'Majburiy', status: 'Holat', sort: 'Tartib',
-};
 
 function HistoryDrawer({ open, messageId, onClose }: { open: boolean; messageId: number | null; onClose: () => void }) {
   const st = useLoad<ChainHistoryEntry[]>(open && messageId ? () => api.chainHistory(messageId) : null, [open, messageId]);
@@ -89,7 +372,7 @@ function HistoryDrawer({ open, messageId, onClose }: { open: boolean; messageId:
             {Object.entries(h.changes).map(([k, [a, b]]) => (
               <div key={k} className="history-change">
                 <span className="muted">{FIELD_LABEL[k] ?? k}</span>
-                <span><span className="history-old">{fmtVal(a)}</span> → <span className="history-new">{fmtVal(b)}</span></span>
+                <span><span className="history-old">{fmtVal(k, a)}</span> → <span className="history-new">{fmtVal(k, b)}</span></span>
               </div>
             ))}
           </div>
@@ -193,10 +476,23 @@ function SimSummary({ sim }: { sim: { registered_at: string; day1_at: string; ro
   );
 }
 
+// ───────────── sahifa ─────────────
+
+/** /chain?new=left_before_min&day=1&minute=40 — Statistika sahifasidan kelgan tayyor qoralama. */
+function draftFromParams(p: URLSearchParams, sort: number): ChainMessageInput | null {
+  if (p.get('new') !== 'left_before_min') return null;
+  const minute = parseInt(p.get('minute') ?? '', 10);
+  const day = p.get('day') === '2' ? 2 : 1;
+  if (!Number.isFinite(minute) || minute <= 0) return null;
+  return leftBeforeDraft(minute, day, sort);
+}
+
 function ChainBody({ fid }: { fid: number }) {
   const toast = useToast();
   const confirm = useConfirm();
+  const [params, setParams] = useSearchParams();
   const chain = useLoad(() => api.chain(fid), [fid]);
+  const settings = useLoad(() => api.settings(fid), [fid]);
   const [sel, setSel] = useState<Selected>(null);
   const [form, setForm] = useState<ChainMessageInput | null>(null);
   const [base, setBase] = useState<string>('');
@@ -205,26 +501,44 @@ function ChainBody({ fid }: { fid: number }) {
   const [showSim, setShowSim] = useState(false);
   const [sim, setSim] = useState<{ registered_at: string; day1_at: string; rows: SimulationRow[] } | null>(null);
   const [showHistory, setShowHistory] = useState(false);
+  const [advOpen, setAdvOpen] = useState(false);
+  const [serverErrs, setServerErrs] = useState<string[]>([]);
   const editorRef = useRef<HTMLElement>(null);
 
   const list = chain.data ?? [];
   const current = sel && sel.id !== 'new' ? list.find((m) => m.id === sel.id) ?? null : null;
   const dirty = !!form && JSON.stringify(form) !== base;
+  const deadlineMin = (settings.data?.deadline_hours ?? 24) * 60;
+  const maxSort = list.reduce((a, m) => Math.max(a, m.sort), 0);
 
   const byPhase = useMemo(() => {
     const map: Record<PhaseKey, ChainMessage[]> = { reg: [], day1: [], between: [], day2: [], after: [], other: [] };
-    for (const m of sortChain(list)) map[phaseOf(m)].push(m);
+    for (const m of sortChain(list, deadlineMin)) map[phaseOf(m)].push(m);
     return map;
-  }, [list]);
+  }, [list, deadlineMin]);
 
-  // Birinchi yuklanishda birinchi xabarni tanlaymiz
-  useEffect(() => {
-    if (sel || !chain.data?.length) return;
-    const first = sortChain(chain.data)[0];
-    setSel({ id: first.id });
-    const f = toInput(first);
+  const open = (f: ChainMessageInput, id: Selected, saved: boolean) => {
+    setSel(id);
     setForm(f);
-    setBase(JSON.stringify(f));
+    setBase(saved ? JSON.stringify(f) : '');
+    setServerErrs([]);
+    setAdvOpen(isSpecialTrigger(f.trigger_type));
+  };
+
+  // Birinchi yuklanishda: URL dagi tayyor qoralama yoki birinchi xabar
+  useEffect(() => {
+    if (sel || !chain.data) return;
+    const draft = draftFromParams(params, chain.data.reduce((a, m) => Math.max(a, m.sort), 0) + 1);
+    if (draft) {
+      open(draft, { id: 'new' }, false);
+      setParams({}, { replace: true });
+      setTimeout(() => editorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 120);
+      return;
+    }
+    if (!chain.data.length) return;
+    const first = sortChain(chain.data)[0];
+    open(toInput(first), { id: first.id }, true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chain.data, sel]);
 
   useEffect(() => {
@@ -236,31 +550,34 @@ function ChainBody({ fid }: { fid: number }) {
 
   const guard = async () => !dirty || confirm({ title: "Saqlanmagan o'zgarishlar", message: "Joriy xabardagi o'zgarishlar saqlanmagan. Ularni tashlab ketasizmi?", confirmText: 'Tashlab ketish', danger: true });
 
-  const scrollToEditor = () => {
-    if (window.matchMedia('(max-width: 899px)').matches) setTimeout(() => editorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+  const scrollToEditor = (always = false) => {
+    if (always || window.matchMedia('(max-width: 899px)').matches) setTimeout(() => editorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
   };
 
   const select = async (m: ChainMessage) => {
     if (sel && sel.id === m.id) return;
     if (!(await guard())) return;
-    const f = toInput(m);
-    setSel({ id: m.id });
-    setForm(f);
-    setBase(JSON.stringify(f));
+    open(toInput(m), { id: m.id }, true);
     scrollToEditor();
   };
 
   const createNew = async (phase: PhaseKey) => {
     if (!(await guard())) return;
-    const maxSort = list.reduce((a, m) => Math.max(a, m.sort), 0);
-    const f = defaultsForPhase(phase, maxSort + 1);
-    setSel({ id: 'new' });
-    setForm(f);
-    setBase('');
+    open(defaultsForPhase(phase, maxSort + 1), { id: 'new' }, false);
     scrollToEditor();
   };
 
-  const patch = (p: Partial<ChainMessageInput>) => setForm((f) => (f ? { ...f, ...p } : f));
+  /** Tomosha statistikasidan: shu daqiqagacha chiqib ketganlarga xabar. */
+  const createLeftBefore = async (minute: number, day: 1 | 2) => {
+    if (!(await guard())) return;
+    open(leftBeforeDraft(minute, day, maxSort + 1), { id: 'new' }, false);
+    scrollToEditor(true);
+  };
+
+  const patch: Patch = (p) => {
+    setForm((f) => (f ? { ...f, ...p } : f));
+    setServerErrs((e) => (e.length ? [] : e));
+  };
 
   const replaceInList = (m: ChainMessage) => chain.setData((l) => {
     const arr = l ?? [];
@@ -270,7 +587,7 @@ function ChainBody({ fid }: { fid: number }) {
   const save = async (override?: Partial<ChainMessageInput>) => {
     if (!form) return;
     const body = normalize({ ...form, ...override, buttons: cleanButtons(form.buttons) });
-    const errs = validate(body);
+    const errs = validate(body, settings.data);
     if (errs.length) {
       toast.error(errs[0]);
       return;
@@ -287,8 +604,11 @@ function ChainBody({ fid }: { fid: number }) {
       setSel({ id: saved.id });
       setForm(f);
       setBase(JSON.stringify(f));
+      setServerErrs([]);
       toast.success(saved.warnings?.length ? 'Saqlandi — ogohlantirishlarni ko\'ring' : 'Saqlandi');
     } catch (e) {
+      // Backend validatsiyasi: detail = "xato1; xato2"
+      if (e instanceof ApiError && e.status >= 400 && e.status < 500 && e.detail) setServerErrs(e.detail.split(/;\s*/).filter(Boolean));
       toast.error(e);
     } finally {
       setBusy(null);
@@ -324,10 +644,7 @@ function ChainBody({ fid }: { fid: number }) {
     try {
       const copy = await api.duplicateChain(current.id);
       replaceInList(copy);
-      const f = toInput(copy);
-      setSel({ id: copy.id });
-      setForm(f);
-      setBase(JSON.stringify(f));
+      open(toInput(copy), { id: copy.id }, true);
       toast.success('Nusxa yaratildi (qoralama)');
     } catch (e) {
       toast.error(e);
@@ -341,6 +658,7 @@ function ChainBody({ fid }: { fid: number }) {
     if (sel.id === 'new') {
       setSel(null);
       setForm(null);
+      setServerErrs([]);
       return;
     }
     const id = sel.id;
@@ -370,7 +688,8 @@ function ChainBody({ fid }: { fid: number }) {
 
   const kind = form?.kind ?? 'text';
   const limit = textLimit(kind);
-  const errs = form ? validate(normalize(form)) : [];
+  const errs = form ? validate(normalize(form), settings.data) : [];
+  const paidOnly = form?.segment === 'deposit_paid' || form?.segment === 'full_paid';
 
   return (
     <>
@@ -384,6 +703,8 @@ function ChainBody({ fid }: { fid: number }) {
           </>
         }
       />
+
+      <WatchStatsPanel fid={fid} collapsible compact onMessage={(m, d) => void createLeftBefore(m, d)} />
 
       {!chain.data ? <Loading /> : (
         <div className="timeline-wrap">
@@ -428,9 +749,9 @@ function ChainBody({ fid }: { fid: number }) {
 
       {form && (
         <div className="cols">
-          <section ref={editorRef} className="card col-3" aria-label="Xabar muharriri" style={{ gap: 16, scrollMarginTop: 72 }}>
+          <section ref={editorRef} className="card col-3 chain-editor" aria-label="Xabar muharriri" style={{ scrollMarginTop: 72 }}>
             <div className="row-between">
-              <h2 className="card-title" style={{ fontSize: 18 }}>Xabar: «{form.title || 'Yangi xabar'}»</h2>
+              <h2 className="card-title" style={{ fontSize: 18 }}>{sel?.id === 'new' ? 'Yangi xabar' : 'Xabar'}: «{form.title || 'Yangi xabar'}»</h2>
               <span className={form.status === 'active' ? 'status-pill status-active' : 'status-pill status-draft'}>{form.status === 'active' ? 'Faol' : 'Qoralama'}</span>
             </div>
 
@@ -439,8 +760,18 @@ function ChainBody({ fid }: { fid: number }) {
               <input className="input" value={form.title} onChange={(e) => patch({ title: e.target.value })} placeholder="Efirgacha 2 soat" />
             </label>
 
-            <div className="grid-form">
-              <label className="field">
+            <WhenPicker form={form} patch={patch} settings={settings.data} onOpenAdvanced={() => setAdvOpen(true)} />
+            <AudiencePicker form={form} patch={patch} settings={settings.data} />
+
+            <div className="rule-sentence" aria-live="polite">
+              <span className="rule-label">Qoida</span>
+              <span className="rule-text">{capitalize(ruleSentence(form))}</span>
+              {!paidOnly && <span className="rule-note">To'lov qilgan, botni bloklagan va sovuq lidlarga zanjir xabari bormaydi.</span>}
+            </div>
+
+            <div className="picker">
+              <div className="picker-title"><span className="picker-n" aria-hidden="true">3</span>Xabar</div>
+              <label className="field" style={{ maxWidth: 340 }}>
                 <span>Turi</span>
                 <select className="select" value={form.kind} onChange={(e) => {
                   const k = e.target.value as ChainKind;
@@ -449,92 +780,41 @@ function ChainBody({ fid }: { fid: number }) {
                   {options(KIND_LABEL).map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
                 </select>
               </label>
-              <label className="field">
-                <span>Trigger</span>
-                <select className="select" value={form.trigger_type} onChange={(e) => {
-                  const t = e.target.value as TriggerType;
-                  patch({
-                    trigger_type: t,
-                    trigger_day: needsDay(t) ? form.trigger_day ?? 1 : null,
-                    stuck_step: t === 'stuck' ? form.stuck_step ?? 'no_session' : null,
-                    button_key: t === 'on_button' ? form.button_key ?? '' : null,
-                  });
-                }}>
-                  {options(TRIGGER_LABEL).map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-                </select>
-              </label>
-              {needsDay(form.trigger_type) && (
-                <label className="field">
-                  <span>Kun</span>
-                  <select className="select" value={form.trigger_day ?? 1} onChange={(e) => patch({ trigger_day: Number(e.target.value) as 1 | 2 })}>
-                    <option value={1}>1-kun</option>
-                    <option value={2}>2-kun</option>
-                  </select>
-                </label>
+
+              {kind === 'video_note' ? (
+                <div className="box box-info">Video-doiraga matn qo'shib bo'lmaydi. Matn kerak bo'lsa, alohida xabar yarating.</div>
+              ) : (
+                <TextEditor
+                  id="chain-text"
+                  label={kind === 'text' ? 'Matn' : 'Izoh (caption)'}
+                  value={form.text}
+                  onChange={(v) => patch({ text: v })}
+                  limit={limit}
+                  limitHint={kind === 'text' ? undefined : 'media izohi'}
+                  rows={7}
+                  serverWarnings={current && !dirty ? current.warnings : undefined}
+                />
               )}
-              <OffsetInput minutes={form.offset_minutes} onChange={(m) => patch({ offset_minutes: m })} label={OFFSET_LABEL[form.trigger_type]} />
-              {form.trigger_type === 'stuck' && (
-                <label className="field">
-                  <span>Qaysi qadamda</span>
-                  <select className="select" value={form.stuck_step ?? 'no_session'} onChange={(e) => patch({ stuck_step: e.target.value as StuckStep })}>
-                    {options(STUCK_LABEL).map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-                  </select>
-                </label>
+
+              {kind !== 'text' && (
+                <MediaPicker
+                  kind={kind}
+                  mediaIds={form.media_ids}
+                  onChange={(ids) => patch({ media_ids: ids })}
+                  known={media}
+                  onUploaded={(m) => setMedia((x) => ({ ...x, [m.id]: m }))}
+                />
               )}
-              {form.trigger_type === 'on_button' && (
-                <label className="field">
-                  <span>Tugma kaliti</span>
-                  <input className="input mono" value={form.button_key ?? ''} onChange={(e) => patch({ button_key: e.target.value.replace(/[^\w-]/g, '') })} placeholder="homework" />
-                </label>
+
+              {kind !== 'album' && (
+                <div className="stack-sm">
+                  <div className="field"><span>Tugmalar</span></div>
+                  <ButtonsEditor value={form.buttons} onChange={(b) => patch({ buttons: b })} idPrefix="chain-btn" />
+                </div>
               )}
-              <label className="field">
-                <span>Segment</span>
-                <select className="select" value={form.segment} onChange={(e) => patch({ segment: e.target.value as Segment })}>
-                  {options(SEGMENT_LABEL).filter((o) => o.value !== 'cold').map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-                </select>
-              </label>
-              <label className="field">
-                <span>Tartib raqami</span>
-                <NumberInput value={form.sort} min={0} onChange={(n) => patch({ sort: Math.round(n) })} />
-              </label>
             </div>
 
-            <label className="check">
-              <input type="checkbox" checked={form.required} onChange={(e) => patch({ required: e.target.checked })} />
-              Majburiy — vaqt yetmasa ham siqib yuboriladi
-            </label>
-
-            {kind === 'video_note' ? (
-              <div className="box box-info">Video-doiraga matn qo'shib bo'lmaydi. Matn kerak bo'lsa, alohida xabar yarating.</div>
-            ) : (
-              <TextEditor
-                id="chain-text"
-                label={kind === 'text' ? 'Matn' : 'Izoh (caption)'}
-                value={form.text}
-                onChange={(v) => patch({ text: v })}
-                limit={limit}
-                limitHint={kind === 'text' ? undefined : 'media izohi'}
-                rows={7}
-                serverWarnings={current && !dirty ? current.warnings : undefined}
-              />
-            )}
-
-            {kind !== 'text' && (
-              <MediaPicker
-                kind={kind}
-                mediaIds={form.media_ids}
-                onChange={(ids) => patch({ media_ids: ids })}
-                known={media}
-                onUploaded={(m) => setMedia((x) => ({ ...x, [m.id]: m }))}
-              />
-            )}
-
-            {kind !== 'album' && (
-              <div className="stack-sm">
-                <div className="field"><span>Tugmalar</span></div>
-                <ButtonsEditor value={form.buttons} onChange={(b) => patch({ buttons: b })} idPrefix="chain-btn" />
-              </div>
-            )}
+            <AdvancedSection open={advOpen} onToggle={() => setAdvOpen((o) => !o)} form={form} patch={patch} />
 
             {current?.stats && (
               <div className="msg-stats">
@@ -547,6 +827,14 @@ function ChainBody({ fid }: { fid: number }) {
 
             {errs.length > 0 && dirty && (
               <div className="box box-danger" role="alert"><ul className="plain-list">{errs.map((e) => <li key={e}>{e}</li>)}</ul></div>
+            )}
+            {serverErrs.length > 0 && (
+              <div className="box box-danger" role="alert">
+                <div className="stack-sm" style={{ gap: 4 }}>
+                  <b>Server saqlamadi:</b>
+                  <ul className="plain-list">{serverErrs.map((e) => <li key={e}>{e}</li>)}</ul>
+                </div>
+              </div>
             )}
 
             <div className="row-between">
@@ -563,7 +851,7 @@ function ChainBody({ fid }: { fid: number }) {
             </div>
           </section>
 
-          <section className="col-2 stack-sm" style={{ position: 'sticky', top: 16 }}>
+          <section className="col-2 stack-sm chain-preview">
             <div className="field"><span>Telegram'dagi ko'rinishi</span></div>
             <TelegramPreview kind={kind} text={form.text} buttons={kind === 'album' ? [] : form.buttons} media={form.media_ids.map((id) => media[id])} mediaCount={form.media_ids.length} />
             <div className="muted small">Namuna qiymatlar: {'{ism}'} = Madina, {'{efir_sanasi}'} = 23-oktabr, {'{efir_vaqti}'} = 20:00.</div>

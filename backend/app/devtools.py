@@ -19,6 +19,8 @@ from app.services.leads import event, set_step
 from app.timeutil import now_utc
 
 SAMPLE_HLS = "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8"
+CHAT = ["Hayajonni qanday boshqarsa bo'ladi?", "Ovozim titraydi, nima qilay?", "Rahmat, juda foydali",
+        "Pauzani qachon qilish kerak?", "Kurs onlaynmi?"]
 NAMES = ["Madina", "Sevara", "Dilnoza", "Gulnora", "Zarina", "Malika", "Nodira", "Kamola", "Shahnoza", "Feruza"]
 
 
@@ -70,8 +72,14 @@ async def demo() -> None:
                 db.add(ss)
                 await db.flush()
                 if step != "day1_missed":
-                    db.add(Attendance(session_id=ss.id, lead_id=ld.id, day=1, day_at=d1, watched_sec=random.randint(56, 74) * 60))
-                    ld.day1_watched_sec = random.randint(56, 74) * 60
+                    w = random.randint(56, 74) * 60
+                    db.add(Attendance(session_id=ss.id, lead_id=ld.id, day=1, day_at=d1, watched_sec=w,
+                                      join_position_sec=random.choice([0, 0, 0, 120, 300]), max_position_sec=w))
+                    ld.day1_watched_sec = w
+                else:
+                    w = random.randint(5, 40) * 60
+                    db.add(Attendance(session_id=ss.id, lead_id=ld.id, day=1, day_at=d1, watched_sec=w,
+                                      max_position_sec=w))
                 if step in ("left_before_offer", "reached_offer", "clicked_buy", "receipt_sent", "deposit_paid", "full_paid"):
                     reached = step != "left_before_offer"
                     db.add(Attendance(session_id=ss.id, lead_id=ld.id, day=2, day_at=ss.day2_at,
@@ -95,7 +103,10 @@ async def demo() -> None:
                 ld.payment_status = {"deposit_paid": "deposit", "full_paid": "full"}.get(step, "none")
             await set_step(db, ld, step, reg + timedelta(hours=random.randint(1, 40)))
             if random.random() < 0.2:
-                db.add(Question(lead_id=ld.id, text="Kurs qachon boshlanadi?", source="miniapp"))
+                db.add(Question(lead_id=ld.id, text="Kurs qachon boshlanadi?", source="bot"))
+            if step not in ("started", "phone") and random.random() < 0.5:
+                db.add(Question(lead_id=ld.id, text=random.choice(CHAT), source="miniapp", session_id=ss.id, day=1,
+                                video_sec=random.randint(3, 70) * 60, created_at=ss.day1_at + timedelta(minutes=20)))
         await db.commit()
         print("Demo ma'lumotlar yaratildi. Mini App sinovi: python -m app.devtools initdata 4242")
 

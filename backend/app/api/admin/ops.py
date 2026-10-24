@@ -127,7 +127,7 @@ def chat_out(q: Question, lead: Lead, s: LeadSession | None, show_phone: bool) -
 
 @router.get("/chat")
 async def chat(funnel_id: int, date: date_ | None = None, day: int | None = None, status: str = "all",
-               db: AsyncSession = Depends(get_db), me: AdminUser = Depends(ANY)):
+               session_at: str | None = None, db: AsyncSession = Depends(get_db), me: AdminUser = Depends(ANY)):
     q = (select(Question, Lead, LeadSession).join(Lead, Lead.id == Question.lead_id)
          .outerjoin(LeadSession, LeadSession.id == Question.session_id)
          .where(Lead.funnel_id == funnel_id, Question.source == "miniapp"))
@@ -135,7 +135,11 @@ async def chat(funnel_id: int, date: date_ | None = None, day: int | None = None
         q = q.where(Question.day == day)
     if status == "unanswered":
         q = q.where(Question.answer.is_(None))
-    if date:
+    if session_at and day in (1, 2):
+        # bitta efir: shu kun shu vaqtda boshlangan sessiyalardagi xabarlar (yarim tundan keyingilari ham)
+        at = parse_iso(session_at)
+        q = q.where((LeadSession.day1_at if day == 1 else LeadSession.day2_at) == at)
+    elif date:
         q = q.where(Question.created_at >= local_to_utc(date, time.min),
                     Question.created_at < local_to_utc(date + timedelta(days=1), time.min))
     rows = (await db.execute(q.order_by(Question.created_at.desc()).limit(1000))).all()

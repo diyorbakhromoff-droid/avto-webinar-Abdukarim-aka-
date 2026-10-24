@@ -5,11 +5,12 @@ import { useFunnel } from '../lib/funnel';
 import { ROLE_LABEL } from '../lib/labels';
 import { SECTIONS, canAccess } from '../lib/roles';
 import { IS_MOCK } from '../api/client';
+import { BrandMark } from './BrandMark';
 
 function Logo({ sub }: { sub: string }) {
   return (
     <div className="brand">
-      <div className="brand-mark" aria-hidden="true">ع</div>
+      <BrandMark />
       <div className="brand-text">
         <div className="brand-name">Avtowebinar</div>
         <div className="brand-sub">{sub}</div>

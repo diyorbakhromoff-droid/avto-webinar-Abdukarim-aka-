@@ -6,12 +6,12 @@ import { ApiError } from './errors';
 import { getToken } from './client';
 import type {
   AdSpendRow, AdminUser, AuditRow, Broadcast, CallList, CallListKey, ChainHistoryEntry, ChainMessage,
-  ChainMessageInput, CommentRow, ContactResult, DashboardResponse, FailedMessage, Funnel, FunnelSettings,
-  GlobalSettings, LeadCard, LeadEvent, LeadRow, LeadStep, LiveResults, MediaInfo, PaymentKind, PaymentMethod,
-  PaymentRow, QuestionRow, Requisites, SimulationRow, StatsResponse, TariffAdmin,
+  ChainMessageInput, ChatRow, ChatSession, CommentRow, ContactResult, DashboardResponse, FailedMessage, Funnel,
+  FunnelSettings, GlobalSettings, LeadCard, LeadEvent, LeadRow, LeadStep, LiveResults, MediaInfo, PaymentKind,
+  PaymentMethod, PaymentRow, QuestionRow, Requisites, SimulationRow, StatsResponse, TariffAdmin, WatchBucket, WatchStats,
 } from './types';
-import { CALL_LIST_FALLBACK, STEP_LABEL, SEGMENT_SHORT } from '../lib/labels';
-import { whenLabel } from '../lib/chain';
+import { CALL_LIST_FALLBACK, MINUTE_SEGMENTS, STEP_LABEL, WATCH_SEGMENTS } from '../lib/labels';
+import { DAY_TRIGGERS, audienceShort, whenLabel } from '../lib/chain';
 import { dayKey, pad2, tzParts, tzToUtc } from '../lib/time';
 import { slotOptions } from '../lib/slots';
 
@@ -53,71 +53,78 @@ const users: (AdminUser & { password: string })[] = [
 const publicUser = ({ password: _pw, ...u }: AdminUser & { password: string }): AdminUser => (void _pw, u);
 
 const funnels: Funnel[] = [
-  { id: 1, slug: 'arab', name: 'Arab tili voronkasi', bot_username: 'arabtili_webinar_bot' },
-  { id: 2, slug: 'tajvid', name: 'Tajvid kursi', bot_username: 'arabtili_webinar_bot' },
+  { id: 1, slug: 'notiqlik', name: 'Notiqlik', bot_username: 'notiqlik_webinar_bot' },
+  { id: 2, slug: 'bolalar', name: 'Bolalar notiqligi', bot_username: 'notiqlik_webinar_bot' },
 ];
 
 function baseSettings(): FunnelSettings {
   return {
-    course_title: 'Arab tili kursi', webinar_title: 'Bepul webinar · 2 kun',
-    topic: "Arab alifbosini 40 daqiqada o'qishni o'rganing", speaker_name: 'Ustoza Madina Aliyeva',
-    speaker_title: "10 yillik tajribaga ega arab tili o'qituvchisi", speaker_photo_url: null, logo_url: null,
+    course_title: 'Notiqlik kursi', webinar_title: 'Bepul webinar · 2 kun',
+    topic: "Ishonch bilan gapirish: sahna qo'rquvini 2 kunda yengamiz", speaker_name: 'Jasur Karimov',
+    speaker_title: "Notiqlik murabbiyi, 8 yillik tajriba", speaker_photo_url: null, logo_url: null,
     theme_primary: '#D4AF5A', theme_background: '#14110C', bg_image_url: null,
-    welcome_text: "Assalomu alaykum, {ism}! 🌙\n\nBepul 2 kunlik webinarga xush kelibsiz. Sovg'a — <b>arab alifbosi jadvali</b> (PDF).",
-    lead_magnet_media_id: 901, lead_magnet_caption: 'Arab alifbosi jadvali — chop etib, devoringizga osib qo\'ying',
+    welcome_text: "Assalomu alaykum, {ism}! 🎤\n\nBepul 2 kunlik notiqlik webinariga xush kelibsiz. Sovg'a — <b>«Sahnada 5 daqiqa»</b> mashqlar varag'i (PDF).",
+    lead_magnet_media_id: 901, lead_magnet_caption: "«Sahnada 5 daqiqa» — har kuni 5 daqiqalik ovoz va nafas mashqlari",
     slot_times: ['14:00', '20:00'], weekdays: [0, 1, 2, 3, 4, 5, 6], excluded_dates: ['2026-12-31', '2027-01-01'],
     min_hours_before: 3, options_count: 2, late_entry_minutes: 15, reschedule_limit: 3, day1_watch_threshold: 0.75,
     quiet_start: '23:00', quiet_end: '08:00',
-    day1_video_id: '7f3c1a2e-91b4-4c55-a1e0-2d9b8e6f0a11', day1_duration_sec: 74 * 60, day1_soft_offer_sec: null,
-    day2_video_id: 'b2e94d70-3f1a-4a8e-9c62-5e0d7a1c4b22', day2_duration_sec: 82 * 60, day2_offer_sec: 58 * 60,
-    between_summary: ["Arab alifbosining 28 harfi bilan tanishdik", "Harflarning so'z boshi, o'rtasi va oxiridagi shakllari", "Uy vazifasi: 5 ta so'zni o'qib, ovozli xabar yuboring"],
-    offer_course_title: 'Arab tili: 3 oylik kurs',
-    bonuses: ["Tajvid bo'yicha 4 ta qo'shimcha dars", "Kurator bilan haftalik savol-javob", "Yopiq Telegram guruh"],
+    day1_video_id: '7f3c1a2e-91b4-4c55-a1e0-2d9b8e6f0a11', day1_duration_sec: 122 * 60, day1_soft_offer_sec: 110 * 60,
+    day2_video_id: 'b2e94d70-3f1a-4a8e-9c62-5e0d7a1c4b22', day2_duration_sec: 96 * 60, day2_offer_sec: 78 * 60,
+    between_summary: ["Sahna qo'rquvi qayerdan kelishini tushundik", "Nafas va ovoz uchun 3 ta mashq", "Uy vazifasi: o'zingiz haqingizda 1 daqiqalik video yozing"],
+    offer_course_title: 'Notiqlik kursi: 8 hafta',
+    bonuses: ["Shaxsiy ovoz tahlili (audio)", "Kurator bilan haftalik jonli mashg'ulot", "Yopiq Telegram guruh"],
     deadline_hours: 24, after_deadline: 'regular_price', channel_id: -1002233445566,
     stuck_no_phone_min: 60, stuck_no_session_min: 120, stuck_no_receipt_min: 60,
   };
 }
-const settings: Record<number, FunnelSettings> = { 1: baseSettings(), 2: { ...baseSettings(), course_title: 'Tajvid kursi', slot_times: ['19:00'], weekdays: [0, 1, 2, 3, 4] } };
+const settings: Record<number, FunnelSettings> = { 1: baseSettings(), 2: { ...baseSettings(), course_title: 'Bolalar notiqligi', slot_times: ['19:00'], weekdays: [0, 1, 2, 3, 4] } };
 const requisites: Record<number, Requisites> = {
-  1: { card_number: '8600 1234 5678 9012', card_holder: 'MADINA ALIYEVA', payme_url: 'https://payme.uz/fallback/arabtili', click_url: 'https://my.click.uz/services/pay?service_id=0000' },
-  2: { card_number: '8600 1234 5678 9012', card_holder: 'MADINA ALIYEVA', payme_url: '', click_url: '' },
+  1: { card_number: '8600 1234 5678 9012', card_holder: 'JASUR KARIMOV', payme_url: 'https://payme.uz/fallback/notiqlik', click_url: 'https://my.click.uz/services/pay?service_id=0000' },
+  2: { card_number: '8600 1234 5678 9012', card_holder: 'JASUR KARIMOV', payme_url: '', click_url: '' },
 };
 let seq = 5000;
 const nextId = () => ++seq;
 
 const tariffs: Record<number, TariffAdmin[]> = {
   1: [
-    { id: 11, name: 'Standart', description: 'Darslar + uy vazifasi tekshiruvi', special_price: 1490000, regular_price: 1990000, deposit_enabled: true, deposit_amount: 100000, sort: 1 },
-    { id: 12, name: 'VIP', description: 'Standart + shaxsiy kurator va haftalik savol-javob', special_price: 2490000, regular_price: 3290000, deposit_enabled: true, deposit_amount: 100000, sort: 2 },
+    { id: 11, name: 'Standart', description: '16 ta dars + uy vazifalari tekshiruvi', special_price: 1490000, regular_price: 1990000, deposit_enabled: true, deposit_amount: 100000, sort: 1 },
+    { id: 12, name: 'VIP', description: 'Standart + shaxsiy kurator va ovoz tahlili', special_price: 2490000, regular_price: 3290000, deposit_enabled: true, deposit_amount: 100000, sort: 2 },
   ],
-  2: [{ id: 21, name: 'Standart', description: 'Tajvid: 8 ta dars', special_price: 790000, regular_price: 990000, deposit_enabled: false, deposit_amount: 0, sort: 1 }],
+  2: [{ id: 21, name: 'Standart', description: 'Bolalar uchun: 8 ta dars', special_price: 790000, regular_price: 990000, deposit_enabled: false, deposit_amount: 0, sort: 1 }],
 };
 
 // ───────────── progrev zanjiri ─────────────
 type Seed = Partial<ChainMessage> & Pick<ChainMessage, 'title' | 'trigger_type' | 'offset_minutes'>;
+const ENTER = [[{ type: 'webapp' as const, text: 'Efirga kirish' }]];
+const BACK = [[{ type: 'webapp' as const, text: 'Efirga qaytish' }]];
+const PAY = [[{ type: 'pay' as const, text: 'Kursga yozilish' }]];
 const chainSeed: Seed[] = [
-  { title: 'Xush kelibsiz + lid magnit', kind: 'document', trigger_type: 'after_registration', offset_minutes: 0, required: true, media_ids: [901], text: "Assalomu alaykum, {ism}! Mana va'da qilingan sovg'a — <b>arab alifbosi jadvali</b>." },
-  { title: 'Vaqt tanlash', trigger_type: 'after_registration', offset_minutes: 1, required: true, text: "{ism}, efir 2 kun davom etadi. O'zingizga qulay vaqtni tanlang 👇", buttons: [[{ type: 'reschedule', text: 'Vaqt tanlash' }]] },
-  { title: 'Spiker haqida', kind: 'video', trigger_type: 'after_registration', offset_minutes: 180, media_ids: [902], text: "Men Madina Aliyeva — 10 yildan beri arab tilini o'rgataman. Efirda nimalarni ko'rsatishimni qisqacha aytib beraman." },
-  { title: 'Ertaga efir', trigger_type: 'before_day', trigger_day: 1, offset_minutes: 1440, text: "{ism}, eslatma: efir {efir_sanasi} kuni soat {efir_vaqti} da. Qalam va daftar tayyorlab qo'ying ✍️" },
-  { title: 'Efirgacha 2 soat', kind: 'photo', trigger_type: 'before_day', trigger_day: 1, offset_minutes: 120, required: true, media_ids: [903], text: "{ism}, efirgacha 2 soat qoldi! Bugun {efir_vaqti} da arab alifbosini 40 daqiqada qanday o'qishni ko'rsataman. Telefoningizni quvvatlab qo'ying.", buttons: [[{ type: 'reschedule', text: "Vaqtni o'zgartirish" }]] },
-  { title: '15 daqiqa qoldi', trigger_type: 'before_day', trigger_day: 1, offset_minutes: 15, required: true, text: 'Efir 15 daqiqadan keyin boshlanadi ⏰', buttons: [[{ type: 'webapp', text: 'Efirga kirish' }]] },
-  { title: 'Efirga kirish', trigger_type: 'at_day_start', trigger_day: 1, offset_minutes: 0, required: true, text: '<b>Efir boshlandi!</b> Kirish uchun tugmani bosing 👇', buttons: [[{ type: 'webapp', text: 'Efirga kirish' }]] },
-  { title: 'Kirmaganlarga eslatma', trigger_type: 'at_day_start', trigger_day: 1, offset_minutes: 10, text: "{ism}, efir boshlanganiga 10 daqiqa bo'ldi. Hali kirish mumkin — keyin kirish yopiladi.", buttons: [[{ type: 'webapp', text: 'Efirga kirish' }]] },
-  { title: '1-kun xulosasi', trigger_type: 'after_day_end', trigger_day: 1, offset_minutes: 0, segment: 'day1_attended', text: "Bugun juda yaxshi ishladingiz, {ism}! 28 harfning hammasi bilan tanishdik. Ertaga {efir_vaqti} da — 2-kun." },
-  { title: 'Uy vazifasi', trigger_type: 'after_day_end', trigger_day: 1, offset_minutes: 120, segment: 'day1_attended', text: "Kichik uy vazifasi: rasmdagi 5 ta so'zni o'qing va ovozli xabar yuboring 🎙", buttons: [[{ type: 'url', text: 'Vazifa', url: 'https://example.com/vazifa' }]] },
-  { title: 'Boshqa vaqt tanlash', trigger_type: 'after_day_end', trigger_day: 1, offset_minutes: 0, segment: 'day1_missed', text: "{ism}, bugungi efirga ulgurmadingiz. Hech qisqi yo'q — boshqa vaqtni tanlang:", buttons: [[{ type: 'reschedule', text: 'Boshqa vaqt tanlash' }]] },
-  { title: 'Bugun ikkinchi kun', trigger_type: 'before_day', trigger_day: 2, offset_minutes: 120, segment: 'day1_attended', text: "Bugun {efir_vaqti} da 2-kun! O'qishdan gapirishga o'tamiz." },
-  { title: 'Taklif', kind: 'photo', trigger_type: 'at_day_start', trigger_day: 2, offset_minutes: 58, segment: 'day2_attended', media_ids: [904], text: "<b>Arab tili: 3 oylik kurs</b> — maxsus narx {deadline} gacha amal qiladi.", buttons: [[{ type: 'pay', text: 'Kursga yozilish' }]] },
+  { title: "Xush kelibsiz + sovg'a", kind: 'document', trigger_type: 'after_registration', offset_minutes: 0, required: true, media_ids: [901], text: "Assalomu alaykum, {ism}! Mana va'da qilingan sovg'a — <b>«Sahnada 5 daqiqa»</b> mashqlar varag'i." },
+  { title: 'Vaqt tanlash', trigger_type: 'after_registration', offset_minutes: 1, required: true, text: "{ism}, webinar 2 kun davom etadi. O'zingizga qulay vaqtni tanlang 👇", buttons: [[{ type: 'reschedule', text: 'Vaqt tanlash' }]] },
+  { title: 'Spiker bilan tanishuv', kind: 'video', trigger_type: 'after_registration', offset_minutes: 60, media_ids: [902], text: "Men Jasur Karimov — 8 yildan beri odamlarga ishonch bilan gapirishni o'rgataman. Efirda nimalarni ko'rsatishimni qisqacha aytib beraman." },
+  { title: 'Ertaga efir', trigger_type: 'before_day', trigger_day: 1, offset_minutes: 1440, text: "{ism}, eslatma: webinar {efir_sanasi} kuni soat {efir_vaqti} da. Daftar va ruchka tayyorlab qo'ying ✍️" },
+  { title: 'Efirgacha 2 soat', kind: 'photo', trigger_type: 'before_day', trigger_day: 1, offset_minutes: 120, required: true, media_ids: [903], text: "{ism}, efirgacha 2 soat qoldi! Bugun {efir_vaqti} da sahna qo'rquvini 3 qadamda qanday yengishni ko'rsataman. Quloqchinni tayyorlab qo'ying.", buttons: [[{ type: 'reschedule', text: "Vaqtni o'zgartirish" }]] },
+  { title: '15 daqiqa qoldi', trigger_type: 'before_day', trigger_day: 1, offset_minutes: 15, required: true, text: 'Webinar 15 daqiqadan keyin boshlanadi ⏰', buttons: ENTER },
+  { title: 'Efir boshlandi', trigger_type: 'at_day_start', trigger_day: 1, offset_minutes: 0, required: true, text: '<b>Efir boshlandi!</b> Kirish uchun tugmani bosing 👇', buttons: ENTER },
+  { title: 'Hali kirmaganlar', trigger_type: 'at_day_start', trigger_day: 1, offset_minutes: 10, segment: 'not_joined', segment_day: 1, text: "{ism}, efir boshlanganiga 10 daqiqa bo'ldi. Hali ulgurasiz — kiring.", buttons: ENTER },
+  { title: '1-kun: efirdan chiqib ketganlar', trigger_type: 'left_live', trigger_day: 1, offset_minutes: 3, required: true, text: "{ism}, efir hali davom etyapti — eng muhim qismi oldinda. Qaytib kiring:", buttons: BACK },
+  { title: '1-kun xulosasi', trigger_type: 'after_day_end', trigger_day: 1, offset_minutes: 5, segment: 'watched_full', segment_day: 1, text: "Oxirigacha ko'rganingiz uchun rahmat, {ism}! Bugun sahna qo'rquvi qayerdan kelishini tushundik. Ertaga {efir_vaqti} da — 2-kun." },
+  { title: '40-daqiqagacha chiqib ketganlar', trigger_type: 'after_day_end', trigger_day: 1, offset_minutes: 10, segment: 'left_before_min', segment_day: 1, segment_minute: 40, text: "{ism}, efirdan erta chiqib ketdingiz — eng foydali qism 40-daqiqadan keyin edi: «pauza» texnikasi. Ertangi efirni o'tkazib yubormang." },
+  { title: 'Boshqa vaqt tanlash', trigger_type: 'after_day_end', trigger_day: 1, offset_minutes: 0, segment: 'day1_missed', text: "{ism}, bugungi webinarga ulgurmadingiz. Hech qisi yo'q — boshqa vaqtni tanlang:", buttons: [[{ type: 'reschedule', text: 'Boshqa vaqt tanlash' }]] },
+  { title: 'Uy vazifasi', trigger_type: 'after_day_end', trigger_day: 1, offset_minutes: 120, segment: 'day1_attended', text: "Kichik uy vazifasi: o'zingiz haqingizda 1 daqiqalik video yozing va menga yuboring 🎙", buttons: [[{ type: 'url', text: 'Vazifa', url: 'https://example.com/vazifa' }]] },
+  { title: 'Bugun ikkinchi kun', trigger_type: 'before_day', trigger_day: 2, offset_minutes: 120, segment: 'day1_attended', text: "Bugun {efir_vaqti} da 2-kun! Nazariyadan amaliyotga o'tamiz — birinchi nutqingizni tuzamiz." },
+  { title: '2-kun boshlandi', trigger_type: 'at_day_start', trigger_day: 2, offset_minutes: 0, segment: 'day1_attended', required: true, text: '2-kun boshlandi! «Efirga kirish» tugmasini bosing.', buttons: ENTER },
+  { title: 'Taklif', kind: 'photo', trigger_type: 'at_day_start', trigger_day: 2, offset_minutes: 78, segment: 'day2_attended', media_ids: [904], text: "<b>Notiqlik kursi: 8 hafta</b> — maxsus narx {deadline} gacha amal qiladi.", buttons: PAY },
   { title: 'Muddati tugaydi', trigger_type: 'before_day', trigger_day: 2, offset_minutes: 15, status: 'draft', text: "{ism}, jonli efirdagi maxsus narx tez orada tugaydi!", warnings: ["Matnda «jonli» so'zi bor — halollik qoidasi (TZ §11)"] },
-  { title: 'Taklif va narx', trigger_type: 'after_day_end', trigger_day: 2, offset_minutes: 0, segment: 'left_before_offer', text: "{ism}, efirning oxirida kurs haqida aytdim — siz chiqib ketgan ekansiz. Qisqacha: …", buttons: [[{ type: 'pay', text: 'Kursga yozilish' }]] },
-  { title: 'Deadline eslatmasi', trigger_type: 'after_day_end', trigger_day: 2, offset_minutes: 120, segment: 'not_paid', text: 'Maxsus narx {deadline} gacha saqlanadi.', buttons: [[{ type: 'pay', text: 'Kursga yozilish' }]] },
-  { title: 'Oxirgi imkoniyat', trigger_type: 'after_day_end', trigger_day: 2, offset_minutes: 1260, segment: 'not_paid', required: true, text: "{ism}, maxsus narx 3 soatdan keyin yopiladi ({deadline}). Keyin faqat oddiy narx bo'ladi.", buttons: [[{ type: 'pay', text: 'Kursga yozilish' }]] },
+  { title: '2-kun: efirdan chiqib ketganlar', trigger_type: 'left_live', trigger_day: 2, offset_minutes: 3, required: true, text: "{ism}, efirdan chiqib ketdingiz. Kurs haqidagi taklif hali oldinda — qaytib kiring:", buttons: BACK },
+  { title: 'Ofertagacha chiqib ketganlar', trigger_type: 'after_day_end', trigger_day: 2, offset_minutes: 0, segment: 'left_before_offer', text: "{ism}, efir oxirida kurs haqida aytdim — siz chiqib ketgan ekansiz. Qisqacha: 8 hafta, 16 ta amaliy dars.", buttons: PAY },
+  { title: 'Deadline eslatmasi', trigger_type: 'after_day_end', trigger_day: 2, offset_minutes: 120, segment: 'not_paid', text: 'Maxsus narx {deadline} gacha saqlanadi.', buttons: PAY },
+  { title: 'Deadline: 3 soat qoldi', trigger_type: 'before_deadline', offset_minutes: 180, segment: 'not_paid', required: true, text: "{ism}, maxsus narx tugashiga 3 soat qoldi ({deadline} gacha). Keyin oddiy narxga o'tadi.", buttons: PAY },
   { title: 'Raqamni yuborish eslatmasi', trigger_type: 'stuck', stuck_step: 'no_phone', offset_minutes: 60, text: "{ism}, sovg'ani olish va vaqt tanlash uchun raqamingizni yuboring 👇" },
-  { title: 'Vaqt tanlash eslatmasi', trigger_type: 'stuck', stuck_step: 'no_session', offset_minutes: 120, text: 'Efir vaqtini hali tanlamadingiz. Eng yaqin vaqtlar:', buttons: [[{ type: 'reschedule', text: 'Vaqt tanlash' }]] },
+  { title: 'Vaqt tanlash eslatmasi', trigger_type: 'stuck', stuck_step: 'no_session', offset_minutes: 120, text: 'Webinar vaqtini hali tanlamadingiz. Eng yaqin vaqtlar:', buttons: [[{ type: 'reschedule', text: 'Vaqt tanlash' }]] },
   { title: 'Chek yuborish eslatmasi', trigger_type: 'stuck', stuck_step: 'no_receipt', offset_minutes: 60, text: "To'lovni amalga oshirgan bo'lsangiz, chekni shu yerga yuboring. Rekvizitlar:", buttons: [[{ type: 'pay', text: "To'lov rekvizitlari" }]] },
   { title: 'Chek rad etildi', trigger_type: 'stuck', stuck_step: 'receipt_rejected', offset_minutes: 0, required: true, text: "Chekingizni tasdiqlab bo'lmadi. Iltimos, qayta yuboring." },
-  { title: 'Uy vazifasi javobi', trigger_type: 'on_button', button_key: 'homework', offset_minutes: 0, status: 'draft', text: "Rahmat, {ism}! Vazifangizni ustoz ko'rib chiqadi." },
+  { title: 'Uy vazifasi javobi', trigger_type: 'on_button', button_key: 'homework', offset_minutes: 0, status: 'draft', text: "Rahmat, {ism}! Videongizni ko'rib chiqib, fikrimni yozaman." },
 ];
 
 function mkChain(fid: number): ChainMessage[] {
@@ -126,6 +133,7 @@ function mkChain(fid: number): ChainMessage[] {
     title: s.title, kind: s.kind ?? 'text', text: s.text ?? '', media_ids: s.media_ids ?? [], buttons: s.buttons ?? [],
     trigger_type: s.trigger_type, trigger_day: s.trigger_day ?? null, offset_minutes: s.offset_minutes,
     stuck_step: s.stuck_step ?? null, button_key: s.button_key ?? null, segment: s.segment ?? 'all',
+    segment_day: s.segment_day ?? null, segment_minute: s.segment_minute ?? null,
     required: s.required ?? false, status: s.status ?? 'active', sort: i + 1,
     updated_at: iso(NOW - between(1, 200) * H), updated_by: pick(['Kamola Yusupova', 'Diyor Bakhromov']),
     stats: s.status === 'draft' ? undefined : { sent: between(40, 410), clicks: s.buttons ? between(5, 120) : 0, blocked_after: between(0, 6) },
@@ -181,8 +189,8 @@ function mkLead(id: number, fid: number, forceStep?: LeadStep, name?: string): L
     phone: step === 'started' ? null : `+998 ${pick(['90', '91', '93', '94', '97', '99', '88'])} ${between(100, 999)} ${pad2(between(0, 99))} ${pad2(between(0, 99))}`,
     username: rand() < 0.7 ? `${fn.split(' ')[0].toLowerCase()}_${between(1, 99)}` : null,
     source: pick(SOURCES),
-    day1_minutes: watched1 ? between(56, 74) : step === 'day1_missed' && rand() < 0.4 ? between(5, 40) : null,
-    day2_minutes: day2 ? (reached ? between(58, 82) : between(20, 55)) : step === 'day2_missed' && rand() < 0.3 ? between(5, 30) : null,
+    day1_minutes: watched1 ? between(92, 122) : step === 'day1_missed' && rand() < 0.4 ? between(5, 60) : null,
+    day2_minutes: day2 ? (reached ? between(78, 96) : between(20, 70)) : step === 'day2_missed' && rand() < 0.3 ? between(5, 30) : null,
     reached_offer: reached, clicked_buy: atLeast(step, 'clicked_buy'),
     receipt: step === 'receipt_sent' ? 'pending' : step === 'receipt_rejected' ? 'rejected' : pay !== 'none' ? 'approved' : 'none',
     payment_status: pay, manager: mgr, step, step_label: STEP_LABEL[step],
@@ -206,8 +214,8 @@ const leads: LeadState[] = [];
   leads[0].phone = '+998 90 123 45 67';
   leads[0].username = 'madina_k';
   leads[0].source = 'ig_reels3';
-  leads[0].day1_minutes = 71;
-  leads[0].day2_minutes = 34;
+  leads[0].day1_minutes = 118;
+  leads[0].day2_minutes = 41;
   leads[0].manager = { id: 3, name: 'Nodira' };
   for (let i = 0; i < 131; i++) leads.push(mkLead(1100 + i, 1));
   for (let i = 0; i < 23; i++) leads.push(mkLead(2100 + i, 2));
@@ -276,11 +284,59 @@ const payments: (PaymentRow & { funnel_id: number })[] = [];
 
 // ───────────── qolganlar ─────────────
 const questions: (QuestionRow & { funnel_id: number })[] = [
-  { id: 1, funnel_id: 1, lead_id: 1001, lead_name: 'Madina Karimova', text: "Darslar yozib olinadimi? Ishdan keyin ko'ra olamanmi?", source: 'miniapp', created_at: iso(NOW - 25 * M), answer: null, answered_at: null },
+  { id: 1, funnel_id: 1, lead_id: 1001, lead_name: 'Madina Karimova', text: "Kurs necha hafta davom etadi va darslar qaysi kunlari bo'ladi? Ishdan keyin ulguramanmi?", source: 'bot', created_at: iso(NOW - 25 * M), answer: null, answered_at: null },
   { id: 2, funnel_id: 1, lead_id: 1102, lead_name: leads[8].name, text: "Bo'lib to'lash mumkinmi?", source: 'bot', created_at: iso(NOW - 3 * H), answer: null, answered_at: null },
-  { id: 3, funnel_id: 1, lead_id: 1105, lead_name: leads[11].name, text: "Men umuman arab harflarini bilmayman, kursga qatnasha olamanmi?", source: 'miniapp', created_at: iso(NOW - 7 * H), answer: null, answered_at: null },
-  { id: 4, funnel_id: 1, lead_id: 1110, lead_name: leads[16].name, text: 'Kurs qachon boshlanadi?', source: 'bot', created_at: iso(NOW - 2 * D), answer: "Keyingi guruh dushanba kuni boshlanadi, to'lovdan keyin kanal havolasi keladi.", answered_at: iso(NOW - 2 * D + 30 * M) },
+  { id: 3, funnel_id: 1, lead_id: 1105, lead_name: leads[11].name, text: "Men 45 yoshdaman, notiqlikni o'rganishga kech emasmi?", source: 'bot', created_at: iso(NOW - 7 * H), answer: null, answered_at: null },
+  { id: 4, funnel_id: 1, lead_id: 1110, lead_name: leads[16].name, text: 'Keyingi guruh qachon boshlanadi?', source: 'bot', created_at: iso(NOW - 2 * D), answer: "Keyingi guruh dushanba kuni boshlanadi, to'lovdan keyin kanal havolasi keladi.", answered_at: iso(NOW - 2 * D + 30 * M) },
 ];
+
+// ───────────── efir chati (Mini App'da efir davomida) ─────────────
+const chat: (ChatRow & { funnel_id: number })[] = [];
+(() => {
+  // Oxirgi o'tgan slotlar (14:00 / 20:00), eng yangisi birinchi
+  const slots: number[] = [];
+  for (let d = 0; d >= -4; d--) for (const hh of [20, 14]) slots.push(todayAt(hh, 0, d));
+  const past = slots.filter((t) => t <= NOW - 20 * M).sort((a, z) => z - a);
+  const sessions: { day: 1 | 2; at: number }[] = [
+    { day: 1, at: past[0] },
+    { day: 2, at: past[1] },
+    { day: 1, at: past[1] - D },
+    { day: 1, at: past[4] },
+  ];
+  const texts: [string, number][] = [
+    ["Assalomu alaykum! Samarqanddan kuzatyapman 👋", 95],
+    ["Sahnaga chiqsam ovozim titraydi. Shu nafas mashqi yordam beradimi?", 1012],
+    ["Nafas mashqini kuniga necha marta qilish kerak?", 1390],
+    ["Ishda taqdimot qilishdan juda qo'rqaman, kurs menga mos keladimi?", 2052],
+    ["Pauza haqida yana bir marta tushuntirib bera olasizmi?", 2290],
+    ["Juda foydali, rahmat! Yozib oldim ✍️", 2765],
+    ["Ovoz biroz uzilib qoldi, faqat mendami?", 3301],
+    ["Mikrofon bilan gapirganda qo'llarimni qayerga qo'yaman?", 4120],
+    ["Farzandim 14 yoshda, u ham qatnasha oladimi?", 5480],
+    ["Kurs onlaynmi yoki oflaynmi?", 6650],
+  ];
+  const fl = leads.filter((l) => l.funnel_id === 1 && l.phone);
+  let id = 1;
+  sessions.forEach((ss, si) => {
+    const dur = ss.day === 1 ? 122 * 60 : 96 * 60;
+    const n = [7, 5, 4, 3][si];
+    for (let k = 0; k < n; k++) {
+      const [text, sec0] = texts[(k * 3 + si * 2) % texts.length];
+      const video_sec = Math.min(dur - 30, sec0 + si * 37 + k * 11);
+      const created = ss.at + (video_sec + between(20, 180)) * 1000;
+      if (created > NOW - M) continue;
+      const lead = fl[(si * 7 + k * 5) % fl.length];
+      const answered = si >= 2 || (si === 1 && k < 2) || (si === 0 && k === 1);
+      chat.push({
+        id: id++, funnel_id: 1, lead_id: lead.id, lead_name: lead.name, lead_phone: lead.phone,
+        text, day: ss.day, video_sec, session_at: iso(ss.at), created_at: iso(created),
+        answer: answered ? pick(["Ha, albatta! Kursda buni alohida darsda mashq qilamiz.", "Rahmat savolingiz uchun — efir oxirida batafsil aytaman.", "Kuniga 2 marta, 5 daqiqadan yetarli."]) : null,
+        answered_at: answered ? iso(Math.min(NOW - M, created + between(2, 30) * M)) : null,
+        answered_by: answered ? pick(['Kamola Yusupova', 'Nodira Karimova']) : null,
+      });
+    }
+  });
+})();
 
 const broadcasts: (Broadcast & { funnel_id: number })[] = [
   { id: 1, funnel_id: 1, segment: 'cold', text: "Assalomu alaykum! Yangi bepul webinar vaqtlari ochildi — o'zingizga qulay vaqtni tanlang.", buttons: [[{ type: 'reschedule', text: 'Vaqt tanlash' }]], media_id: null, send_at: null, status: 'done', recipients: 214, created_at: iso(NOW - 3 * D) },
@@ -289,7 +345,7 @@ const broadcasts: (Broadcast & { funnel_id: number })[] = [
 
 const comments: (CommentRow & { funnel_id: number })[] = [];
 (() => {
-  const texts = ["Assalomu alaykum ustoz!", "Toshkentdan salom 👋", "Juda tushunarli tushuntiryapsiz", "Bu harfni qanday yozamiz?", "Rahmat, yozib oldim", "Men ham birinchi marta o'qidim!", "Ovoz yaxshi eshitilyapti", "Uy vazifasi qayerda bo'ladi?", "Ajoyib, davom eting", "Ertaga ham bo'ladimi?"];
+  const texts = ["Assalomu alaykum!", "Toshkentdan salom 👋", "Juda tushunarli tushuntiryapsiz", "Men ham sahnada shunday qotib qolaman", "Rahmat, yozib oldim", "Nafas mashqi rostdan yordam berdi!", "Ovoz yaxshi eshitilyapti", "Uy vazifasi qayerda bo'ladi?", "Ajoyib, davom eting", "Ertaga ham bo'ladimi?"];
   let cid = 1;
   for (const day of [1, 2] as const) {
     for (let i = 0; i < 10; i++) comments.push({ id: cid++, funnel_id: 1, day, t: 30 + i * between(200, 420), author: pick(FIRST), text: texts[(i + day) % texts.length] });
@@ -305,11 +361,11 @@ const adSpend: Record<number, AdSpendRow[]> = {
   2: [],
 };
 const liveResults: Record<number, LiveResults> = { 1: { day1_watch_rate: 0.41, paid_rate: 0.048, cost_per_sale: 980000 }, 2: { day1_watch_rate: null, paid_rate: null, cost_per_sale: null } };
-let globalSettings: GlobalSettings = { admin_group_chat_id: -1001987654321, bot_username: 'arabtili_webinar_bot' };
+let globalSettings: GlobalSettings = { admin_group_chat_id: -1001987654321, bot_username: 'notiqlik_webinar_bot' };
 const audit: AuditRow[] = [
   { at: iso(NOW - 2 * H), user: 'Kamola Yusupova', action: 'chain.update', details: '«Efirgacha 2 soat»: matn o\'zgardi' },
   { at: iso(NOW - 5 * H), user: 'Nodira Karimova', action: 'payment.approve', details: "Chek #1031 tasdiqlandi (100 000 so'm)" },
-  { at: iso(NOW - D), user: 'Diyor Bakhromov', action: 'requisites.update', details: 'Arab tili voronkasi: Payme havolasi yangilandi' },
+  { at: iso(NOW - D), user: 'Diyor Bakhromov', action: 'requisites.update', details: 'Notiqlik: Payme havolasi yangilandi' },
   { at: iso(NOW - 2 * D), user: 'Diyor Bakhromov', action: 'user.create', details: 'Aziz Rahimov (sotuv menejeri)' },
 ];
 const failed: FailedMessage[] = [
@@ -455,10 +511,30 @@ function findMsg(id: number): [number, ChainMessage] {
   }
   return notFound();
 }
+/** Backend validatsiyasi (chain.py validate + media_rules.validate_message): 400 + "xato1; xato2". */
+function validateChain(m: ChainMessageInput) {
+  const errors: string[] = [];
+  if (DAY_TRIGGERS.has(m.trigger_type) && m.trigger_day !== 1 && m.trigger_day !== 2) errors.push('Kun (1 yoki 2) tanlanmagan');
+  if (m.trigger_type === 'stuck' && !m.stuck_step) errors.push("To'xtab qolish qadami tanlanmagan");
+  if (m.trigger_type === 'on_button' && !m.button_key) errors.push('Tugma kaliti kiritilmagan');
+  const segDay = m.segment_day || m.trigger_day;
+  if (WATCH_SEGMENTS.has(m.segment) && segDay !== 1 && segDay !== 2) errors.push('Qaysi kun videosi ekanini tanlang');
+  if (MINUTE_SEGMENTS.has(m.segment) && !(m.segment_minute && m.segment_minute > 0)) errors.push('Videoning daqiqasini kiriting');
+  if (m.offset_minutes < 0) errors.push("Vaqt manfiy bo'lishi mumkin emas");
+  if (m.kind === 'album' && m.buttons.length) errors.push("Albomga tugma qo'shib bo'lmaydi — tugmalarni keyingi xabarga qo'ying");
+  if (m.kind === 'album' && (m.media_ids.length < 2 || m.media_ids.length > 10)) errors.push("Albomda 2–10 ta media bo'lishi kerak.");
+  if (m.kind !== 'text' && m.kind !== 'album' && m.media_ids.length !== 1) errors.push('Bu turdagi xabarga bitta media biriktiring.');
+  const limit = m.kind === 'text' ? 4096 : 1024;
+  if (m.text.length > limit) errors.push(`Matn ${m.text.length} belgi — chegara ${limit}.`);
+  if (m.buttons.length > 3) errors.push("Tugmalar 1–3 qator bo'lishi kerak.");
+  if (errors.length) throw new ApiError(400, errors.join('; '));
+}
+
 on('GET', '/admin/funnels/:id/chain', (c) => chain[n(c.m[1])] ?? []);
 on('POST', '/admin/funnels/:id/chain', (c) => {
   need(c, 'super_admin', 'content');
   const body = b<ChainMessageInput>(c);
+  validateChain(body);
   const m: ChainMessage = { ...body, id: nextId(), updated_at: iso(Date.now()), updated_by: c.user.name, warnings: honestyWarnings(body.text) };
   (chain[n(c.m[1])] ??= []).push(m);
   chainHistory[m.id] = [{ at: m.updated_at, user: c.user.name, changes: { title: [null, m.title] } }];
@@ -468,6 +544,7 @@ on('PUT', '/admin/chain/:id', (c) => {
   need(c, 'super_admin', 'content');
   const [, m] = findMsg(n(c.m[1]));
   const body = b<ChainMessageInput>(c);
+  validateChain(body);
   const changes: Record<string, [unknown, unknown]> = {};
   for (const [k, v] of Object.entries(body)) {
     const old = (m as unknown as Record<string, unknown>)[k];
@@ -513,7 +590,7 @@ on('POST', '/admin/funnels/:id/chain/simulate', (c) => {
   const compressQueue: ChainMessage[] = [];
   for (const m of active) {
     const trig = whenLabel(m);
-    const seg = m.segment !== 'all' ? `segmentga bog'liq: ${SEGMENT_SHORT[m.segment]}` : null;
+    const seg = m.segment !== 'all' ? `faqat: ${audienceShort(m)}` : null;
     let t: number | null = null;
     switch (m.trigger_type) {
       case 'after_registration':
@@ -527,8 +604,12 @@ on('POST', '/admin/funnels/:id/chain/simulate', (c) => {
       case 'before_day': t = (m.trigger_day === 2 ? d2 : d1) - m.offset_minutes * M; break;
       case 'at_day_start': t = (m.trigger_day === 2 ? d2 : d1) + m.offset_minutes * M; break;
       case 'after_day_end': t = (m.trigger_day === 2 ? d2 + s.day2_duration_sec * 1000 : d1 + s.day1_duration_sec * 1000) + m.offset_minutes * M; break;
+      case 'before_deadline': t = d2 + s.day2_duration_sec * 1000 + s.deadline_hours * H - m.offset_minutes * M; break;
       default:
-        rows.push({ message_id: m.id, title: m.title, trigger: trig, send_at: null, status: 'event', reason: m.trigger_type === 'stuck' ? "lid qadamda to'xtasa" : 'tugma bosilganda' });
+        rows.push({
+          message_id: m.id, title: m.title, trigger: trig, send_at: null, status: 'event',
+          reason: m.trigger_type === 'stuck' ? "lid qadamda to'xtasa" : m.trigger_type === 'left_live' ? `lid ${m.trigger_day}-kun efiridan chiqib ketsa (qaytsa — bekor)` : 'tugma bosilganda',
+        });
         continue;
     }
     if (t < reg) {
@@ -649,17 +730,19 @@ function ensureExtra(l: LeadState): NonNullable<LeadState['extra']> {
     push(reg + 2 * M, 'session', 'Sessiya tanladi', `1-kun: ${new Date(day1).toISOString().slice(0, 10)} · 2-kun birga`);
     push(day1 - 2 * H, 'bot_message', 'Bot: «Efirgacha 2 soat»', 'yetkazildi');
   }
+  const d1min = Math.round(s.day1_duration_sec / 60), d2min = Math.round(s.day2_duration_sec / 60), offerMin = Math.round(s.day2_offer_sec / 60);
   if (l.day1_minutes !== null && day1) {
     push(day1 + 2 * M, 'day1_enter', '1-kunga kirdi', '2 daqiqa kech');
-    const ok = l.day1_minutes / 74 >= 0.75;
-    push(day1 + 74 * M, ok ? 'day1_watched' : 'day1_left', '1-kun tugadi', `${l.day1_minutes} / 74 daqiqa ko'rdi — ${ok ? "2-kunga taklif oldi" : "75% dan kam"}`);
+    const ok = l.day1_minutes / d1min >= 0.75;
+    if (!ok) push(day1 + l.day1_minutes * M, 'left_live', 'Efirdan chiqib ketdi', `1-kun, ${l.day1_minutes}-daqiqada`);
+    push(day1 + d1min * M, ok ? 'day1_watched' : 'day1_left', '1-kun tugadi', `${l.day1_minutes} / ${d1min} daqiqa ko'rdi — ${ok ? "2-kunga taklif oldi" : "75% dan kam"}`);
   } else if (l.step === 'day1_missed' && day1) {
-    push(day1 + 74 * M, 'day1_missed', "1-kunni ko'rmadi", "Qayta vaqt tanlash xabari yuborildi");
+    push(day1 + d1min * M, 'day1_missed', "1-kunni ko'rmadi", "Qayta vaqt tanlash xabari yuborildi");
   }
   if (l.day2_minutes !== null && day1) {
     push(day1 + D, 'day2_enter', '2-kunga kirdi', "o'z vaqtida");
-    push(day1 + D + l.day2_minutes * M, l.reached_offer ? 'offer_reached' : 'day2_left', l.reached_offer ? 'Oferta momentiga yetdi' : '2-kundan chiqdi', `${l.day2_minutes} daqiqa ko'rdi${l.reached_offer ? '' : ` — ofertagacha ${58 - l.day2_minutes} daqiqa qolgan`}`);
-    if (!l.reached_offer) push(day1 + D + 82 * M + 30 * M, 'bot_message', 'Bot: «Taklif va narx» eslatmasi', 'Ofertagacha chiqib ketganlar uchun');
+    push(day1 + D + l.day2_minutes * M, l.reached_offer ? 'offer_reached' : 'day2_left', l.reached_offer ? 'Oferta momentiga yetdi' : '2-kundan chiqdi', `${l.day2_minutes} daqiqa ko'rdi${l.reached_offer ? '' : ` — ofertagacha ${offerMin - l.day2_minutes} daqiqa qolgan`}`);
+    if (!l.reached_offer) push(day1 + D + d2min * M + 30 * M, 'bot_message', 'Bot: «Ofertagacha chiqib ketganlar»', 'Ofertagacha chiqib ketganlar uchun');
   }
   if (l.clicked_buy && day1) push(day1 + D + 60 * M, 'click_buy', '«Kursga yozilish» bosdi', 'Standart');
   for (const p of payments.filter((x) => x.lead_id === l.id)) {
@@ -813,6 +896,45 @@ on('POST', '/admin/questions/:id/answer', (c) => {
   return { ok: true };
 });
 
+// efir chati — barcha rollar; kontent menejerga telefon ko'rinmaydi
+const chatOut = (r: ChatRow & { funnel_id: number }, u: AdminUser): ChatRow => {
+  const { funnel_id: _f, ...row } = r;
+  void _f;
+  return { ...row, lead_phone: u.role === 'content' ? null : row.lead_phone };
+};
+on('GET', '/admin/chat', (c) => {
+  const fid = n(c.q.funnel_id ?? '1');
+  return chat
+    .filter((r) => r.funnel_id === fid)
+    .filter((r) => !c.q.day || r.day === n(c.q.day))
+    .filter((r) => c.q.status !== 'unanswered' || r.answer === null)
+    .filter((r) => !c.q.date || dayKey(r.created_at) === c.q.date)
+    .sort((a, z) => Date.parse(z.created_at) - Date.parse(a.created_at))
+    .map((r) => chatOut(r, c.user));
+});
+on('GET', '/admin/chat/sessions', (c) => {
+  const fid = n(c.q.funnel_id ?? '1');
+  const map = new Map<string, ChatSession>();
+  for (const r of chat) {
+    if (r.funnel_id !== fid || !r.day || !r.session_at) continue;
+    const k = `${r.day}|${r.session_at}`;
+    const cur = map.get(k) ?? { day: r.day, at: r.session_at, count: 0, unanswered: 0 };
+    cur.count++;
+    if (r.answer === null) cur.unanswered++;
+    map.set(k, cur);
+  }
+  return [...map.values()].sort((a, z) => Date.parse(z.at) - Date.parse(a.at));
+});
+on('POST', '/admin/chat/:id/reply', (c) => {
+  const r = chat.find((x) => x.id === n(c.m[1]));
+  const text = (b<{ text: string }>(c).text ?? '').trim();
+  if (!r || !text) throw new ApiError(400, 'Javob matnini yozing');
+  const lead = leads.find((l) => l.id === r.lead_id);
+  if (lead?.blocked) throw new ApiError(400, "Lidga yuborib bo'lmadi (botni bloklagan bo'lishi mumkin)");
+  Object.assign(r, { answer: text, answered_at: iso(Date.now()), answered_by: c.user.name });
+  return chatOut(r, c.user);
+});
+
 // broadcasts
 on('GET', '/admin/funnels/:id/broadcasts', (c) => broadcasts.filter((x) => x.funnel_id === n(c.m[1])).map(({ funnel_id: _f, ...x }) => (void _f, x)));
 on('POST', '/admin/funnels/:id/broadcasts', (c) => {
@@ -854,6 +976,7 @@ on('GET', '/admin/dashboard', (c) => {
     funnel, upcoming,
     pending_receipts: payments.filter((p) => p.funnel_id === fid && p.status === 'pending').length,
     unanswered_questions: questions.filter((q) => q.funnel_id === fid && q.answer === null).length,
+    unanswered_chat: chat.filter((r) => r.funnel_id === fid && r.answer === null).length,
     failed_messages: failed.length,
   };
   return res;
@@ -902,8 +1025,8 @@ on('GET', '/admin/stats', (c) => {
   return {
     metrics,
     retention: [
-      { day: 1, duration_min: Math.round(s.day1_duration_sec / 60), offer_min: s.day1_soft_offer_sec ? Math.round(s.day1_soft_offer_sec / 60) : null, points: curve(Math.round(s.day1_duration_sec / 60), 11 + f, [[0, 6], [35, 42]]) },
-      { day: 2, duration_min: Math.round(s.day2_duration_sec / 60), offer_min: Math.round(s.day2_offer_sec / 60), points: curve(Math.round(s.day2_duration_sec / 60), 22 + f, [[20, 30], [58, 66]]) },
+      { day: 1, duration_min: Math.round(s.day1_duration_sec / 60), offer_min: s.day1_soft_offer_sec ? Math.round(s.day1_soft_offer_sec / 60) : null, points: curve(Math.round(s.day1_duration_sec / 60), 11 + f, [[0, 6], [35, 40]]) },
+      { day: 2, duration_min: Math.round(s.day2_duration_sec / 60), offer_min: Math.round(s.day2_offer_sec / 60), points: curve(Math.round(s.day2_duration_sec / 60), 22 + f, [[20, 25], [78, 84]]) },
     ],
     messages: (chain[fid] ?? []).filter((m) => m.stats).map((m) => ({ id: m.id, title: m.title, sent: v(m.stats!.sent), clicks: v(m.stats!.clicks), blocked_after: m.stats!.blocked_after })),
     steps: [
@@ -921,6 +1044,76 @@ on('GET', '/admin/stats', (c) => {
       { label: 'Bitta sotuv narxi', auto: spend ? Math.round(spend / Math.max(1, v(9))) : null, live: lr.cost_per_sale },
     ],
   } satisfies StatsResponse;
+});
+/**
+ * Tomosha statistikasi: har bir efirga kirish uchun (kirgan soniya, eng uzoq yetgan soniya) generatsiya qilinadi,
+ * keyin backend (services/stats.watch_curve) bilan bir xil hisoblanadi.
+ */
+const WATCH_PROFILE: Record<1 | 2, { joined: number; dips: [number, number, number][] }> = {
+  // [daqiqadan, daqiqagacha, qo'shimcha chiqish ehtimoli / daqiqa]
+  1: { joined: 186, dips: [[0, 5, 0.012], [35, 40, 0.026], [60, 65, 0.011], [110, 114, 0.01]] },
+  2: { joined: 121, dips: [[20, 25, 0.022], [78, 83, 0.05]] },
+};
+function watchRows(fid: number, day: 1 | 2, q: Record<string, string>): [number, number][] {
+  if (fid !== 1) return [];
+  const s = settings[fid];
+  const dur = day === 1 ? s.day1_duration_sec : s.day2_duration_sec;
+  let k = 1;
+  if (q.source) k *= 0.42;
+  if (q.slot) k *= q.slot === '20:00' ? 0.62 : 0.38;
+  if (q.date_from || q.date_to) {
+    const from = q.date_from ? Date.parse(q.date_from) : NOW - 60 * D;
+    const to = q.date_to ? Date.parse(q.date_to) + D : NOW;
+    k *= Math.max(0, Math.min(1, (to - from) / (24 * D)));
+  }
+  const prof = WATCH_PROFILE[day];
+  const total = Math.round(prof.joined * k);
+  const r = rng(fid * 1000 + day * 100 + total);
+  const rows: [number, number][] = [];
+  for (let i = 0; i < total; i++) {
+    const join = r() < 0.93 ? 0 : Math.round(30 + r() * 270); // ozchilik birinchi 5 daqiqada kech kiradi
+    let mx = dur;
+    for (let m = Math.floor(join / 60); m < dur / 60; m++) {
+      let hazard = 0.0042;
+      for (const [a, z, extra] of prof.dips) if (m >= a && m < z) hazard += extra;
+      if (r() < hazard) {
+        mx = Math.min(dur, Math.max(join + 10, m * 60 + Math.floor(r() * 60)));
+        break;
+      }
+    }
+    rows.push([join, mx]);
+  }
+  return rows;
+}
+on('GET', '/admin/funnels/:id/watch-stats', (c) => {
+  const fid = n(c.m[1]);
+  const s = settings[fid] ?? notFound();
+  const day: 1 | 2 = c.q.day === '2' ? 2 : 1;
+  const step = Math.max(1, Math.min(30, n(c.q.step ?? '5') || 5));
+  const dur = day === 1 ? s.day1_duration_sec : s.day2_duration_sec;
+  const offer = day === 1 ? s.day1_soft_offer_sec : s.day2_offer_sec;
+  const rows = watchRows(fid, day, c.q);
+  const joined = rows.length;
+  const r4 = (x: number) => Math.round(x * 10000) / 10000;
+  const buckets: WatchBucket[] = [];
+  let prev: number | null = null;
+  for (let m = 0; m <= Math.floor(dur / 60); m += step) {
+    const viewers = rows.filter(([j, mx]) => j <= m * 60 && m * 60 <= mx).length;
+    const share = joined ? r4(viewers / joined) : 0;
+    const left = m ? rows.filter(([j, mx]) => j <= (m - step) * 60 && (m - step) * 60 <= mx && mx < m * 60).length : 0;
+    buckets.push({ minute: m, viewers, share, drop: prev !== null ? r4(prev - share) : 0, left });
+    prev = share;
+  }
+  const top = buckets.slice(1).filter((x) => x.left > 0).sort((a, z) => z.left - a.left).slice(0, 3);
+  const res: WatchStats = {
+    day, step, duration_min: Math.floor(dur / 60), offer_min: offer ? Math.floor(offer / 60) : null,
+    joined,
+    avg_watch_min: joined ? Math.round(rows.reduce((a, [j, mx]) => a + Math.max(mx - j, 0), 0) / joined / 60) : 0,
+    full: rows.filter(([, mx]) => dur && mx >= 0.95 * dur).length,
+    buckets,
+    top_drops: top.map((x) => ({ from_minute: x.minute - step, to_minute: x.minute, left: x.left })),
+  };
+  return res;
 });
 on('GET', '/admin/funnels/:id/ad-spend', (c) => adSpend[n(c.m[1])] ?? []);
 on('POST', '/admin/funnels/:id/ad-spend', (c) => {

@@ -1,8 +1,8 @@
 # Avtowebinar — admin panel
 
 Jamoa uchun veb-ilova: voronkalar, webinar videosi, slotlar, progrev zanjiri, sotuv bloki,
-izohlar, lidlar va qo'ng'iroq ro'yxatlari, to'lovlar (cheklar navbati), savollar, ommaviy xabar,
-statistika va sozlamalar. Interfeys tili — o'zbek (lotin). Barcha vaqtlar Asia/Tashkent (UTC+5)
+izohlar, lidlar va qo'ng'iroq ro'yxatlari, to'lovlar (cheklar navbati), savollar, efir chati, ommaviy xabar,
+statistika (jumladan har 5 daqiqalik tomosha statistikasi) va sozlamalar. Interfeys tili — o'zbek (lotin). Barcha vaqtlar Asia/Tashkent (UTC+5)
 da ko'rsatiladi, backendga UTC ISO satr yuboriladi.
 
 Stack: React 18.3.1, TypeScript 5.6, Vite 5.4, react-router-dom 6.28. UI kit yo'q — oddiy CSS
@@ -55,7 +55,7 @@ src/
   lib/                       vaqt (Toshkent), formatlar, auth/funnel/toast/confirm kontekstlari,
                              halollik tekshiruvi, Telegram HTML preview, slot hisobi (TZ §5)
   components/                Layout (sidebar), Modal, TextEditor, ButtonsEditor, MediaPicker,
-                             TelegramPreview, RetentionChart, maydonlar
+                             TelegramPreview, WatchStatsPanel (tomosha statistikasi), maydonlar
   pages/                     har bir bo'lim uchun sahifa
 ```
 
@@ -64,8 +64,8 @@ src/
 | Rol | Bo'limlar |
 | --- | --- |
 | Super admin | hammasi, jumladan Sozlamalar va karta rekvizitlari |
-| Kontent menejer | Dashboard, Voronkalar, Webinar videosi, Slotlar, Progrev zanjiri, Sotuv bloki (rekvizitsiz), Izohlar, Ommaviy xabar, Statistika |
-| Sotuv menejeri | Dashboard, Lidlar, Savollar, To'lovlar, Statistika |
+| Kontent menejer | Dashboard, Voronkalar, Webinar videosi, Slotlar, Progrev zanjiri, Sotuv bloki (rekvizitsiz), Izohlar, Efir chati (telefonsiz), Ommaviy xabar, Statistika |
+| Sotuv menejeri | Dashboard, Lidlar, Savollar, Efir chati, To'lovlar, Statistika |
 
 Frontend faqat menyuni yashiradi; huquqlar backendda tekshiriladi.
 

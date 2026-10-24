@@ -117,6 +117,7 @@ function Attention({ d }: { d: DashboardResponse }) {
   const items: { label: string; n: number; to: string; key: SectionKey; warn: boolean }[] = [
     { label: 'Tasdiq kutayotgan cheklar', n: d.pending_receipts, to: '/payments', key: 'payments', warn: d.pending_receipts > 0 },
     { label: 'Javobsiz savollar', n: d.unanswered_questions, to: '/questions', key: 'questions', warn: d.unanswered_questions > 0 },
+    { label: 'Efir chatidagi javobsiz xabarlar', n: d.unanswered_chat ?? 0, to: '/chat', key: 'chat', warn: (d.unanswered_chat ?? 0) > 0 },
     { label: 'Yuborilmagan xabarlar', n: d.failed_messages, to: '/settings#failed', key: 'settings', warn: d.failed_messages > 0 },
   ];
   return (

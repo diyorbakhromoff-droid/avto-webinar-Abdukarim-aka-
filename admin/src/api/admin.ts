@@ -1,11 +1,11 @@
 import { downloadFile, http, requestBlob, type Query } from './client';
 import type {
   AdSpendRow, AdminUser, AuditRow, Broadcast, BroadcastInput, CallList, CallListKey, ChainButton,
-  ChainHistoryEntry, ChainMessage, ChainMessageInput, CommentInput, CommentRow, ContactInput,
+  ChainHistoryEntry, ChatRow, ChatSession, ChatStatusFilter, ChainMessage, ChainMessageInput, CommentInput, CommentRow, ContactInput,
   DashboardPeriod, DashboardResponse, DeeplinkResponse, FailedMessage, Funnel, FunnelSettings,
   GlobalSettings, LeadCard, LeadMessageInput, LeadStep, LeadsPage, LiveResults, LoginResponse,
   MediaInfo, PaymentKind, PaymentMethod, PaymentRow, PaymentsStatusFilter, QuestionRow, Requisites,
-  SettingsSaveResponse, SimulationRow, StatsResponse, TariffAdmin, UserInput,
+  SettingsSaveResponse, SimulationRow, StatsResponse, TariffAdmin, UserInput, WatchStats,
 } from './types';
 
 export interface LeadsFilter {
@@ -28,6 +28,24 @@ export interface StatsFilter {
   weekday?: number | '';
   method?: PaymentMethod | '';
   manager_id?: number | '';
+}
+
+/** GET /funnels/{id}/watch-stats filtrlari (Statistika sahifasidagi sana/manba/slot bilan bir xil). */
+export interface WatchStatsFilter {
+  day: 1 | 2;
+  step: number;
+  date_from?: string;
+  date_to?: string;
+  source?: string;
+  slot?: string;
+}
+
+export interface ChatFilter {
+  date?: string;
+  day?: 1 | 2 | '';
+  status?: ChatStatusFilter;
+  /** bitta efir: shu kun efirining boshlanish vaqti (ISO) */
+  session_at?: string;
 }
 
 export interface ReceiptUpload {
@@ -129,6 +147,11 @@ export const api = {
   questions: (fid: number, answered: boolean) => http.get<QuestionRow[]>('/admin/questions', { funnel_id: fid, answered }),
   answer: (id: number, text: string) => http.post<unknown>(`/admin/questions/${id}/answer`, { text }),
 
+  // ── Efir chati (barcha rollar) ──
+  chat: (fid: number, f: ChatFilter) => http.get<ChatRow[]>('/admin/chat', q({ funnel_id: fid, ...f })),
+  chatSessions: (fid: number) => http.get<ChatSession[]>('/admin/chat/sessions', { funnel_id: fid }),
+  chatReply: (id: number, text: string) => http.post<ChatRow>(`/admin/chat/${id}/reply`, { text }),
+
   // ── Ommaviy xabar ──
   broadcasts: (fid: number) => http.get<Broadcast[]>(`/admin/funnels/${fid}/broadcasts`),
   createBroadcast: (fid: number, b: BroadcastInput) => http.post<Broadcast>(`/admin/funnels/${fid}/broadcasts`, b),
@@ -139,6 +162,7 @@ export const api = {
   dashboard: (fid: number, period: DashboardPeriod) => http.get<DashboardResponse>('/admin/dashboard', { funnel_id: fid, period }),
   stats: (fid: number, f: StatsFilter) => http.get<StatsResponse>('/admin/stats', q({ funnel_id: fid, ...f })),
   exportStats: (fid: number, f: StatsFilter) => downloadFile('/admin/stats/export.xlsx', q({ funnel_id: fid, ...f }), 'statistika.xlsx'),
+  watchStats: (fid: number, f: WatchStatsFilter) => http.get<WatchStats>(`/admin/funnels/${fid}/watch-stats`, q(f)),
   adSpend: (fid: number) => http.get<AdSpendRow[]>(`/admin/funnels/${fid}/ad-spend`),
   addAdSpend: (fid: number, row: AdSpendRow) => http.post<AdSpendRow>(`/admin/funnels/${fid}/ad-spend`, row),
   liveResults: (fid: number) => http.get<LiveResults>(`/admin/funnels/${fid}/live-results`),

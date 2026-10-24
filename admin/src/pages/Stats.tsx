@@ -1,13 +1,16 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { api, type StatsFilter } from '../api/admin';
 import type { AdSpendRow, LiveResults, PaymentMethod, StatsResponse } from '../api/types';
 import { NeedFunnel } from '../components/NeedFunnel';
-import { RetentionChart, retentionTakeaway } from '../components/RetentionChart';
+import { WatchStatsPanel, type WatchStatsScope } from '../components/WatchStatsPanel';
 import { MoneyInput, NumberInput } from '../components/fields';
 import { Card, Empty, ErrorBox, Loading, PageHead } from '../components/ui';
 import { money, num, pct } from '../lib/format';
+import { useUser } from '../lib/auth';
 import { METHOD_LABEL, options } from '../lib/labels';
 import { useManagers } from '../lib/managers';
+import { canAccess } from '../lib/roles';
 import { fmtDayKey, pad2, todayKey, tzParts, WEEKDAYS } from '../lib/time';
 import { useToast } from '../lib/toast';
 import { useLoad } from '../lib/useLoad';
@@ -181,6 +184,8 @@ function AdSpend({ fid, onSaved }: { fid: number; onSaved: () => void }) {
 
 function StatsBody({ fid }: { fid: number }) {
   const toast = useToast();
+  const user = useUser();
+  const navigate = useNavigate();
   const [f, setF] = useState<StatsFilter>(() => ({ date_from: monthStart(), date_to: todayKey(), source: '', slot: '', weekday: '', method: '', manager_id: '' }));
   const [debounced, setDebounced] = useState(f);
   useEffect(() => {
@@ -201,6 +206,13 @@ function StatsBody({ fid }: { fid: number }) {
     }
   };
   const reload = () => void st.reload();
+  // Tomosha statistikasi faqat sana, manba va slot bo'yicha filtrlanadi
+  const watchScope = useMemo<WatchStatsScope>(() => ({
+    date_from: debounced.date_from, date_to: debounced.date_to, source: debounced.source, slot: debounced.slot,
+  }), [debounced.date_from, debounced.date_to, debounced.source, debounced.slot]);
+  const toChain = canAccess(user.role, 'chain')
+    ? (minute: number, day: 1 | 2) => navigate(`/chain?new=left_before_min&day=${day}&minute=${minute}`)
+    : undefined;
 
   return (
     <>
@@ -226,16 +238,12 @@ function StatsBody({ fid }: { fid: number }) {
                 </table>
               </section>
               <div className="col-2 stack" style={{ gap: 20 }}>
-                {s.retention.length === 0 && <Card title="Tomosha grafigi"><div className="muted">Bu davrda ko'rish ma'lumoti yo'q.</div></Card>}
-                {[...s.retention].sort((a, b) => b.day - a.day).map((r) => (
-                  <Card key={r.day} title={`Tomosha grafigi · ${r.day}-kun`} actions={<span className="small muted">% qolgan tomoshabin</span>}>
-                    <div className="takeaway">{retentionTakeaway(r)}</div>
-                    <RetentionChart r={r} />
-                  </Card>
-                ))}
                 <LiveCompare fid={fid} s={s} onSaved={reload} />
+                <AdSpend fid={fid} onSaved={reload} />
               </div>
             </div>
+
+            <WatchStatsPanel fid={fid} scope={watchScope} onMessage={toChain} />
 
             <Card title="Progrev xabarlari">
               {s.messages.length === 0 ? <Empty title="Xabar statistikasi yo'q" /> : (
@@ -258,29 +266,26 @@ function StatsBody({ fid }: { fid: number }) {
               )}
             </Card>
 
-            <div className="cols">
-              <Card className="col-3" title="To'xtab qolgan lidlar">
-                {s.steps.length === 0 ? <Empty title="Ma'lumot yo'q" /> : (
-                  <div className="table-wrap flat">
-                    <table className="table">
-                      <thead><tr><th>Qadam</th><th className="num">To'xtadi</th><th className="num">Eslatmadan qaytdi</th><th className="num">Qo'ng'iroqdan qaytdi</th><th className="num">Qaytish %</th></tr></thead>
-                      <tbody>
-                        {s.steps.map((r) => (
-                          <tr key={r.step}>
-                            <td className="cell-strong">{r.label}</td>
-                            <td className="num">{num(r.stuck)}</td>
-                            <td className="num">{num(r.returned_by_bot)}</td>
-                            <td className="num">{num(r.returned_by_call)}</td>
-                            <td className="num muted">{r.stuck ? pct((r.returned_by_bot + r.returned_by_call) / r.stuck) : '—'}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </Card>
-              <div className="col-2"><AdSpend fid={fid} onSaved={reload} /></div>
-            </div>
+            <Card title="To'xtab qolgan lidlar">
+              {s.steps.length === 0 ? <Empty title="Ma'lumot yo'q" /> : (
+                <div className="table-wrap flat">
+                  <table className="table">
+                    <thead><tr><th>Qadam</th><th className="num">To'xtadi</th><th className="num">Eslatmadan qaytdi</th><th className="num">Qo'ng'iroqdan qaytdi</th><th className="num">Qaytish %</th></tr></thead>
+                    <tbody>
+                      {s.steps.map((r) => (
+                        <tr key={r.step}>
+                          <td className="cell-strong">{r.label}</td>
+                          <td className="num">{num(r.stuck)}</td>
+                          <td className="num">{num(r.returned_by_bot)}</td>
+                          <td className="num">{num(r.returned_by_call)}</td>
+                          <td className="num muted">{r.stuck ? pct((r.returned_by_bot + r.returned_by_call) / r.stuck) : '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </Card>
           </div>
         );
       })()}

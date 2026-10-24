@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { api } from '../api/admin';
 import type { QuestionRow } from '../api/types';
 import { NeedFunnel } from '../components/NeedFunnel';
-import { Badge, Card, Empty, ErrorBox, Loading, PageHead, Segmented } from '../components/ui';
+import { Card, Empty, ErrorBox, Loading, PageHead, Segmented } from '../components/ui';
 import { agoLabel, fmtDateTime } from '../lib/time';
 import { useToast } from '../lib/toast';
 import { useLoad } from '../lib/useLoad';
@@ -28,10 +28,7 @@ function QuestionCard({ q, onAnswered }: { q: QuestionRow; onAnswered: (id: numb
   return (
     <Card className="q-card">
       <div className="row-between">
-        <div className="row">
-          <Link to={`/leads/${q.lead_id}`} className="strong">{q.lead_name}</Link>
-          <Badge tone={q.source === 'miniapp' ? 'warn' : 'neutral'}>{q.source === 'miniapp' ? 'efirdan' : 'botdan'}</Badge>
-        </div>
+        <Link to={`/leads/${q.lead_id}`} className="strong">{q.lead_name}</Link>
         <span className="small muted" title={fmtDateTime(q.created_at)}>{agoLabel(q.created_at)}</span>
       </div>
       <div className="q-text">{q.text}</div>
@@ -65,7 +62,7 @@ function QuestionsBody({ fid }: { fid: number }) {
       <Segmented label="Savollar" value={answered ? 'yes' : 'no'} onChange={(v) => setAnswered(v === 'yes')}
         options={[{ value: 'no', label: `Javobsiz${!answered && st.data ? ` · ${st.data.length}` : ''}` }, { value: 'yes', label: 'Javob berilgan' }]} />
       {st.error && !st.data ? <ErrorBox error={st.error} onRetry={st.reload} /> : !st.data ? <Loading /> : list.length === 0 ? (
-        <Empty title={answered ? 'Javob berilgan savol yo\'q' : 'Javobsiz savol yo\'q'}>{answered ? undefined : 'Efir yoki botdan kelgan savollar shu yerda paydo bo\'ladi.'}</Empty>
+        <Empty title={answered ? 'Javob berilgan savol yo\'q' : 'Javobsiz savol yo\'q'}>{answered ? undefined : "Botdagi «Savol berish» orqali kelgan savollar shu yerda paydo bo'ladi."}</Empty>
       ) : (
         <div className="stack" style={{ maxWidth: 860 }}>
           {list.map((q) => <QuestionCard key={q.id} q={q} onAnswered={onAnswered} />)}
@@ -78,7 +75,10 @@ function QuestionsBody({ fid }: { fid: number }) {
 export default function Questions() {
   return (
     <>
-      <PageHead title="Savollar" sub="Efirdagi va botdagi savollar. Javob bot orqali lidga boradi." />
+      <PageHead
+        title="Savollar"
+        sub={<>Botdagi «Savol berish» orqali efirdan keyin kelgan savollar. Efir davomidagi xabarlar — <Link to="/chat">«Efir chati»</Link> bo'limida.</>}
+      />
       <NeedFunnel>{(f) => <QuestionsBody key={f.id} fid={f.id} />}</NeedFunnel>
     </>
   );

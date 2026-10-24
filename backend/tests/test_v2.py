@@ -186,6 +186,12 @@ async def test_live_chat_separate_from_questions(db, client, bot, monkeypatch):
     assert [x["text"] for x in questions] == ["Kurs qachon boshlanadi?"]
     sessions = (await client.get(f"/api/admin/chat/sessions?funnel_id={f.id}", headers=hc)).json()
     assert sessions[0]["count"] == 1 and sessions[0]["unanswered"] == 1
+    one = (await client.get("/api/admin/chat", headers=hc, params={
+        "funnel_id": f.id, "day": 1, "session_at": sessions[0]["at"]})).json()
+    assert [x["id"] for x in one] == [q.id]
+    other = (await client.get("/api/admin/chat", headers=hc, params={
+        "funnel_id": f.id, "day": 2, "session_at": sessions[0]["at"]})).json()
+    assert other == []
 
     r = await client.post(f"/api/admin/chat/{q.id}/reply", headers=hc, json={"text": "Har kuni 10 daqiqa"})
     assert r.status_code == 200 and r.json()["answer"] == "Har kuni 10 daqiqa"

@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { IS_MOCK } from '../api/client';
 import { errorText } from '../api/errors';
+import { BrandMark } from '../components/BrandMark';
 import { useAuth } from '../lib/auth';
 
 export default function LoginPage() {
@@ -37,7 +38,7 @@ export default function LoginPage() {
     <div className="login-page">
       <form className="login-card" onSubmit={submit} noValidate>
         <div className="brand">
-          <div className="brand-mark" aria-hidden="true">ع</div>
+          <BrandMark />
           <div className="brand-text">
             <div className="brand-name">Avtowebinar</div>
             <div className="brand-sub">Admin panel</div>

@@ -311,7 +311,8 @@ export interface WatchStats {
   full: number;            // oxirigacha ko'rganlar
   buckets: { minute: number; viewers: number; share: number; drop: number; left: number }[];
   //   minute — videoning daqiqasi (0, 5, 10, ...); viewers — shu daqiqada ko'rib turganlar;
-  //   share — kirganlarga nisbatan 0..1; drop — oldingi nuqtadan kamayish (0..1); left — oraliqda chiqib ketganlar
+  //   share — kirganlarga nisbatan 0..1; left — oldingi nuqtadan shu nuqtagacha chiqib ketganlar;
+  //   drop — left / joined (0..1, manfiy bo'lmaydi)
   top_drops: { from_minute: number; to_minute: number; left: number }[];  // eng ko'p chiqib ketilgan 3 oraliq
 }
 
@@ -322,7 +323,8 @@ export interface ChatRow {
   session_at: string | null;  // shu kun efirining boshlanish vaqti
   created_at: string; answer: string | null; answered_at: string | null; answered_by: string | null;
 }
-// GET  /api/admin/chat?funnel_id&date=YYYY-MM-DD&day=1|2&status=all|unanswered -> ChatRow[]  (barcha rollar)
+// GET  /api/admin/chat?funnel_id&date=YYYY-MM-DD&day=1|2&status=all|unanswered&session_at=ISO -> ChatRow[]
+//      (barcha rollar; session_at + day — bitta efirning xabarlari)
 // GET  /api/admin/chat/sessions?funnel_id -> { day: 1|2; at: string; count: number; unanswered: number }[]
 // POST /api/admin/chat/{id}/reply {text} -> ChatRow   (javob lidga bot orqali boradi)
 

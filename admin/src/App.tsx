@@ -19,6 +19,7 @@ const Comments = lazy(() => import('./pages/Comments'));
 const Leads = lazy(() => import('./pages/Leads'));
 const LeadCardPage = lazy(() => import('./pages/LeadCard'));
 const Questions = lazy(() => import('./pages/Questions'));
+const Chat = lazy(() => import('./pages/Chat'));
 const Payments = lazy(() => import('./pages/Payments'));
 const Broadcasts = lazy(() => import('./pages/Broadcasts'));
 const Stats = lazy(() => import('./pages/Stats'));
@@ -76,6 +77,7 @@ export default function App() {
                   <Route path="leads" element={<Guard k="leads"><Leads /></Guard>} />
                   <Route path="leads/:id" element={<Guard k="leads"><LeadCardPage /></Guard>} />
                   <Route path="questions" element={<Guard k="questions"><Questions /></Guard>} />
+                  <Route path="chat" element={<Guard k="chat"><Chat /></Guard>} />
                   <Route path="payments" element={<Guard k="payments"><Payments /></Guard>} />
                   <Route path="broadcasts" element={<Guard k="broadcasts"><Broadcasts /></Guard>} />
                   <Route path="stats" element={<Guard k="stats"><Stats /></Guard>} />

@@ -178,15 +178,15 @@ async def watch_curve(db: AsyncSession, flt: StatsFilter, f: Funnel, day: int, s
     offer = f.day1_soft_offer_sec if day == 1 else f.day2_offer_sec
     rows = await _positions(db, flt, f, day)
     joined = len(rows)
-    buckets, prev = [], None
+    buckets = []
     for m in list(range(0, dur // 60 + 1, step)) or [0]:
         viewers = _watching_at(rows, m * 60)
         share = round(viewers / joined, 4) if joined else 0
         # shu oraliqda chiqib ketganlar: oldingi nuqtada ko'rib, keyingisiga yetmaganlar
         left = sum(1 for j, mx in rows if j <= (m - step) * 60 <= mx < m * 60) if m else 0
+        # drop — shu oraliqda chiqib ketganlar ulushi (kech kirganlar hisobiga manfiy bo'lmaydi)
         buckets.append({"minute": m, "viewers": viewers, "share": share,
-                        "drop": round(prev - share, 4) if prev is not None else 0, "left": left})
-        prev = share
+                        "drop": round(left / joined, 4) if joined else 0, "left": left})
     top = sorted((b for b in buckets[1:] if b["left"] > 0), key=lambda b: b["left"], reverse=True)[:3]
     avg = round(sum(max(mx - j, 0) for j, mx in rows) / joined / 60) if joined else 0
     return {

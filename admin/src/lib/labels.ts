@@ -25,21 +25,32 @@ export const KIND_SHORT: Record<ChainKind, string> = {
 };
 
 export const TRIGGER_LABEL: Record<TriggerType, string> = {
-  after_registration: "Ro'yxatdan X keyin",
-  before_day: 'Kundan X oldin',
-  at_day_start: 'Kun boshlanishida (+X)',
-  after_day_end: 'Kun tugaganidan X keyin',
+  after_registration: "Ro'yxatdan o'tgach X keyin",
+  before_day: 'Efirdan X oldin',
+  at_day_start: 'Efir boshlanganda (+X)',
+  after_day_end: 'Efir tugagach X keyin',
+  left_live: 'Efirdan chiqib ketganda X keyin',
+  before_deadline: 'Deadline tugashidan X oldin',
   on_button: 'Tugma bosilganda',
-  stuck: "Qadamda X vaqt to'xtab qolganda",
+  stuck: "Lid biror qadamda to'xtab qolganda",
 };
 
+/**
+ * Segmentlar — backend `app/domain/segments.py` dagi SEGMENTS bilan bir xil oddiy tildagi nomlar.
+ * "X" — videoning daqiqasi (segment_minute).
+ */
 export const SEGMENT_LABEL: Record<Segment | 'cold', string> = {
   all: 'Hammaga',
-  day1_attended: '1-kunga kelganlar',
-  day1_missed: '1-kunga kelmaganlar',
+  not_joined: 'Efirga kirmaganlar',
+  reached_min: "Videoning X-daqiqasigacha ko'rganlar",
+  left_before_min: 'X-daqiqaga yetmay chiqib ketganlar',
+  watched_full: "Videoni oxirigacha ko'rganlar",
+  not_full: "Kirgan, lekin oxirigacha ko'rmaganlar",
+  day1_attended: "1-kunni ko'rganlar (≥75%)",
+  day1_missed: "1-kunni ko'rmaganlar",
   day2_attended: '2-kunga kelganlar',
   day2_missed: '2-kunga kelmaganlar',
-  reached_offer: "Oferta momentigacha ko'rganlar",
+  reached_offer: "Ofertagacha ko'rganlar",
   left_before_offer: 'Ofertagacha chiqib ketganlar',
   receipt_sent: 'Chek yuborganlar',
   deposit_paid: "Boshlang'ich to'laganlar",
@@ -47,20 +58,41 @@ export const SEGMENT_LABEL: Record<Segment | 'cold', string> = {
   not_paid: "To'lamaganlar",
   cold: 'Sovuq lidlar',
 };
+/** Kartochkalar uchun qisqa nom (video segmentlari chain.ts dagi audienceShort orqali). */
 export const SEGMENT_SHORT: Record<Segment | 'cold', string> = {
   all: 'hammaga',
-  day1_attended: "≥75% ko'rganlar",
-  day1_missed: "ko'rmaganlar",
+  not_joined: 'efirga kirmaganlar',
+  reached_min: "X-daqiqagacha ko'rganlar",
+  left_before_min: 'X-daqiqagacha chiqib ketganlar',
+  watched_full: "oxirigacha ko'rganlar",
+  not_full: "oxirigacha ko'rmaganlar",
+  day1_attended: "1-kunni ko'rganlar",
+  day1_missed: "1-kunni ko'rmaganlar",
   day2_attended: '2-kunga kelganlar',
-  day2_missed: '2-kunni ko\'rmaganlar',
-  reached_offer: 'ofertagacha ko\'rganlar',
-  left_before_offer: 'ofertagacha chiqqanlar',
+  day2_missed: '2-kunga kelmaganlar',
+  reached_offer: "ofertagacha ko'rganlar",
+  left_before_offer: 'ofertagacha chiqib ketganlar',
   receipt_sent: 'chek yuborganlar',
   deposit_paid: "boshlang'ich to'laganlar",
   full_paid: "to'liq to'laganlar",
   not_paid: "to'lamaganlar",
   cold: 'sovuq lidlar',
 };
+
+/** Video ko'rish segmentlari: segment_day kerak. */
+export const WATCH_SEGMENTS: ReadonlySet<Segment> = new Set<Segment>(['not_joined', 'reached_min', 'left_before_min', 'watched_full', 'not_full']);
+/** X-daqiqa (segment_minute) kerak bo'lgan segmentlar. */
+export const MINUTE_SEGMENTS: ReadonlySet<Segment> = new Set<Segment>(['reached_min', 'left_before_min']);
+export const isWatchSegment = (s: Segment | 'cold'): boolean => s !== 'cold' && WATCH_SEGMENTS.has(s);
+export const isMinuteSegment = (s: Segment | 'cold'): boolean => s !== 'cold' && MINUTE_SEGMENTS.has(s);
+
+/** "Kimga yuboriladi?" tanlovi guruhlari. */
+export const SEGMENT_GROUPS: { label: string | null; items: Segment[] }[] = [
+  { label: null, items: ['all'] },
+  { label: "Video bo'yicha", items: ['not_joined', 'reached_min', 'left_before_min', 'watched_full', 'not_full'] },
+  { label: 'Kun natijasi', items: ['day1_attended', 'day1_missed', 'day2_attended', 'day2_missed', 'reached_offer', 'left_before_offer'] },
+  { label: "To'lov", items: ['not_paid', 'receipt_sent', 'deposit_paid', 'full_paid'] },
+];
 
 export const STUCK_LABEL: Record<StuckStep, string> = {
   no_phone: 'Telefon bermadi',

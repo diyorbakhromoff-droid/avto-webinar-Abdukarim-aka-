@@ -424,9 +424,6 @@ a.tile-warn:hover { background: #F6E9CC; }
 .msg-flag { color: var(--danger); font-weight: 800; }
 .phase-add { min-height: 36px; border-radius: 10px; border: 1px dashed var(--line-dashed); background: transparent; color: var(--muted); font-weight: 700; cursor: pointer; font-size: 13px; }
 .phase-add:hover { color: var(--accent-ink); border-color: var(--accent); background: var(--warn-bg); }
-.offset-input { display: flex; gap: 6px; }
-.offset-input .input { flex: 1 1 80px; }
-.offset-input .select { flex: 1 1 100px; }
 .status-pill { padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 800; }
 .status-active { background: var(--success-bg); color: var(--success); }
 .status-draft { background: var(--subtle); color: var(--ink-3); }
@@ -552,3 +549,122 @@ a.tile-warn:hover { background: #F6E9CC; }
 .color-input { display: flex; gap: 8px; align-items: center; }
 .color-input input[type='color'] { width: 48px; height: 42px; border: 1px solid var(--line-input); border-radius: 10px; padding: 2px; background: var(--surface); flex: 0 0 auto; }
 hr.sep { border: 0; border-top: 1px solid var(--line-2); margin: 4px 0; width: 100%; }
+
+/* ── Brand mark (mikrofon) ── */
+.brand-mark svg { display: block; }
+
+/* ── Progrev muharriri: oddiy tildagi tanlovlar ── */
+.chain-editor { gap: 18px; }
+.chain-preview { position: sticky; top: 16px; }
+.picker {
+  border: 1px solid var(--line); border-radius: 14px; background: var(--surface-2); margin: 0; padding: 14px;
+  display: flex; flex-direction: column; gap: 10px; min-width: 0;
+}
+.picker > legend { float: left; width: 100%; padding: 0; margin: 0 0 10px; }
+.picker > legend + * { clear: both; }
+.picker-title { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 800; color: var(--ink); }
+.picker-n {
+  display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; width: 22px; height: 22px;
+  border-radius: 50%; background: var(--ink); color: var(--gold); font-size: 12px; font-weight: 800;
+}
+.picker-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; min-width: 0; }
+.picker-row > .field { min-width: 0; }
+.picker-select { flex: 1 1 280px; width: auto; min-width: 0; font-weight: 700; }
+.offset-input { display: flex; gap: 6px; align-items: center; min-width: 0; }
+.picker-row > .offset-input { flex: 0 1 300px; }
+.offset-input .input { flex: 1 1 72px; min-width: 64px; }
+.offset-input .select { flex: 1 1 100px; min-width: 92px; }
+.offset-after { font-size: 14px; font-weight: 700; color: var(--ink-2); white-space: nowrap; }
+.day-toggle { flex: 0 0 auto; align-self: center; }
+.picker-row > .minute-input { flex: 0 1 170px; min-width: 130px; }
+.minute-input .input { min-width: 70px; }
+.rule-sentence {
+  display: flex; flex-direction: column; gap: 4px; padding: 12px 14px; border-radius: 12px;
+  background: var(--warn-bg); border: 1px solid var(--warn-line);
+}
+.rule-label { font-size: 11px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--accent); }
+.rule-text { font-size: 15px; font-weight: 700; color: var(--ink); line-height: 1.45; overflow-wrap: anywhere; }
+.rule-note { font-size: 12px; color: var(--accent-ink); }
+.adv { border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
+.adv-toggle {
+  width: 100%; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-height: 48px; padding: 10px 14px;
+  border: 0; background: transparent; border-radius: 14px; cursor: pointer; text-align: left; color: var(--ink);
+}
+.adv-toggle:hover { background: var(--surface-2); }
+.adv-title { font-size: 15px; font-weight: 800; }
+.adv-summary { font-size: 12px; color: var(--muted); font-weight: 600; margin-left: auto; }
+.adv-open .adv-toggle { border-radius: 14px 14px 0 0; border-bottom: 1px solid var(--line-2); }
+.adv-body { padding: 14px; display: flex; flex-direction: column; gap: 14px; }
+.adv-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; align-items: start; }
+@media (max-width: 599px) {
+  .picker { padding: 12px; }
+  .picker-select { flex-basis: 100%; }
+  .picker-row > .offset-input { flex: 1 1 100%; }
+  .adv-summary { margin-left: 26px; flex-basis: 100%; }
+}
+@media (max-width: 899px) { .chain-preview { position: static; } }
+
+/* ── Tomosha statistikasi ── */
+.ws-head { align-items: flex-start; }
+.ws-summary { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 14px; color: var(--ink-2); }
+.ws-summary b { color: var(--ink); font-variant-numeric: tabular-nums; }
+.ws-takeaway { font-weight: 700; color: var(--accent-ink); }
+.ws-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; border-top: 1px solid var(--line-2); }
+.ws-scroll-compact { max-height: 440px; overflow-y: auto; }
+.ws-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.ws-table th {
+  position: sticky; top: 0; z-index: 1; background: var(--surface); text-align: left; color: var(--muted);
+  font-size: 12px; font-weight: 700; padding: 8px; border-bottom: 1px solid var(--line); white-space: nowrap;
+}
+.ws-table td { padding: 5px 8px; border-bottom: 1px solid var(--subtle); vertical-align: middle; }
+.ws-table .num { text-align: right; white-space: nowrap; }
+.ws-row:hover td { background: var(--surface-2); }
+.ws-t { width: 1%; white-space: nowrap; font-weight: 800; font-variant-numeric: tabular-nums; }
+.ws-barcell { width: 60%; min-width: 90px; }
+.ws-track { height: 14px; border-radius: 4px; background: var(--subtle); overflow: hidden; }
+.ws-bar { height: 14px; border-radius: 4px; background: #B5AE9F; }
+.ws-hl td, .ws-row.ws-hl:hover td, .ws-sub-hl td { background: var(--warn-bg); }
+.ws-hl .ws-bar { background: var(--bar); }
+.ws-hl .ws-drop { color: var(--accent-ink); font-weight: 800; }
+.ws-drop { color: var(--ink-2); font-weight: 700; }
+.ws-label { margin-top: 4px; font-size: 12px; font-weight: 700; color: var(--accent-ink); }
+.ws-act-cell { width: 1%; white-space: nowrap; text-align: right; }
+.ws-act { min-height: 32px; padding: 0 10px; font-size: 12px; opacity: 0; pointer-events: none; transition: opacity .12s; }
+.ws-hl .ws-act, .ws-row-on .ws-act, .ws-act:focus-visible { opacity: 1; pointer-events: auto; }
+@media (hover: hover) { .ws-row:hover .ws-act { opacity: 1; pointer-events: auto; } }
+.ws-hl .ws-act { border-color: var(--accent); color: var(--accent-ink); }
+.ws-offer-row td { padding: 6px 8px; font-size: 12px; font-weight: 700; color: var(--ink-2); background: var(--surface-2); border-bottom: 1px dashed var(--line-dashed); }
+.ws-offer-tag {
+  display: inline-flex; align-items: center; margin-left: 6px; padding: 1px 6px; border-radius: 5px;
+  background: var(--ink); color: var(--gold); font-size: 11px; font-weight: 800; letter-spacing: .02em;
+}
+.ws-offer-row .ws-offer-tag { margin: 0 6px 0 0; }
+.ws-sub { display: none; }
+.ws-sub td { padding: 0 8px 10px; border-bottom: 1px solid var(--subtle); }
+.ws-sub-inner { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+.ws-sub .ws-act { opacity: 1; pointer-events: auto; min-height: 40px; font-size: 13px; }
+@media (max-width: 720px) {
+  .ws-table td, .ws-table th { padding-left: 4px; padding-right: 4px; }
+  .ws-table td:first-child, .ws-table th:first-child { padding-left: 0; }
+  .ws-table td:last-child, .ws-table th:last-child { padding-right: 0; }
+  .ws-act-cell { display: none; }
+  .ws-barcell .ws-label { display: none; }
+  .ws-sub.ws-sub-on { display: table-row; }
+  .ws-row.ws-has-sub td { border-bottom-color: transparent; }
+}
+
+/* ── Efir chati ── */
+.chat-filters { display: flex; flex-direction: column; gap: 12px; }
+.chat-list { max-width: 880px; }
+.chat-item { gap: 10px; }
+.chat-item-new { border-color: var(--warn-line); }
+.chat-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 6px 12px; }
+.chat-who { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; min-width: 0; }
+.chat-name { font-size: 15px; font-weight: 800; color: var(--ink); text-decoration: none; }
+a.chat-name:hover { color: var(--accent); text-decoration: underline; }
+.chat-phone { font-size: 13px; font-weight: 700; }
+.chat-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.chat-reply { min-height: 64px; }
+.chip-warn { border-color: var(--warn-line); background: var(--warn-bg); color: var(--accent-ink); }
+.chip-warn:hover { border-color: var(--accent); }
+.chip-more { border-style: dashed; color: var(--muted); }

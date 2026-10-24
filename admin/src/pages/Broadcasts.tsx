@@ -9,7 +9,7 @@ import { Badge, Card, Empty, ErrorBox, Loading, PageHead, Segmented, type Tone }
 import { useConfirm } from '../lib/confirm';
 import { fileSize, num } from '../lib/format';
 import { honestyHits } from '../lib/honesty';
-import { SEGMENT_LABEL, options } from '../lib/labels';
+import { SEGMENT_LABEL, isWatchSegment, options } from '../lib/labels';
 import { visibleLength } from '../lib/telegramHtml';
 import { fmtDateTime, fromLocalInput, toLocalInput } from '../lib/time';
 import { useToast } from '../lib/toast';
@@ -112,7 +112,8 @@ function BroadcastsBody({ fid }: { fid: number }) {
           <label className="field">
             <span>Segment</span>
             <select className="select" value={segment} onChange={(e) => setSegment(e.target.value as Segment | 'cold')}>
-              {options(SEGMENT_LABEL).map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+              {/* Video segmentlari kun/daqiqa talab qiladi — ommaviy xabarda ishlatilmaydi */}
+              {options(SEGMENT_LABEL).filter((o) => !isWatchSegment(o.value)).map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
           </label>
           <TextEditor id="bc-text" label="Matn" value={text} onChange={setText} limit={limit} limitHint={media ? 'media izohi' : undefined} rows={6} />
