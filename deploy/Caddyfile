@@ -1,5 +1,7 @@
 # Manzillar .env dagi APP_DOMAIN va ADMIN_DOMAIN dan olinadi.
 # O'z domeniga o'tishda faqat .env o'zgaradi (MINIAPP_URL / ADMIN_URL ham).
+# API ga "api" emas, noyob "avtowebinar-api" nomi bilan murojaat qilinadi (docker-compose.yml dagi alias):
+# serverdagi boshqa loyihaning "api" servisi shu tarmoqqa ulansa, so'rovlar unga ketib qolmasin.
 {
 	email {$ACME_EMAIL}
 }
@@ -7,7 +9,7 @@
 {$APP_DOMAIN} {
 	encode zstd gzip
 	handle /api/* {
-		reverse_proxy api:8000
+		reverse_proxy avtowebinar-api:8000
 	}
 	handle {
 		root * /srv/miniapp
@@ -26,7 +28,7 @@
 		max_size 60MB
 	}
 	handle /api/* {
-		reverse_proxy api:8000
+		reverse_proxy avtowebinar-api:8000
 	}
 	handle {
 		root * /srv/admin

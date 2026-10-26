@@ -3,8 +3,10 @@ x-backend: &backend
   build: ./backend
   env_file: .env
   environment:
-    DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
-    REDIS_URL: redis://redis:6379/0
+    # noyob nomlar: serverda boshqa loyiha (masalan, uning ham "api" yoki "redis" servisi) shu tarmoqqa
+    # ulanib qolsa ham, so'rovlar adashib unga ketmaydi
+    DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@avtowebinar-postgres:5432/${POSTGRES_DB}
+    REDIS_URL: redis://avtowebinar-redis:6379/0
     STORAGE_DIR: /data/storage
   volumes:
     - storage:/data/storage
@@ -26,12 +28,18 @@ services:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 5s
       retries: 10
+    networks:
+      default:
+        aliases: [avtowebinar-postgres]
     restart: unless-stopped
 
   redis:
     image: redis:7-alpine
     volumes:
       - redisdata:/data
+    networks:
+      default:
+        aliases: [avtowebinar-redis]
     restart: unless-stopped
 
   migrate:
@@ -41,6 +49,9 @@ services:
 
   api:
     <<: *backend
+    networks:
+      default:
+        aliases: [avtowebinar-api]
     depends_on:
       migrate: { condition: service_completed_successfully }
 
