@@ -91,8 +91,9 @@ export type Segment =
   // to'lov
   | 'receipt_sent' | 'deposit_paid' | 'full_paid' | 'not_paid';
 export type StuckStep = 'no_phone' | 'no_session' | 'no_receipt' | 'receipt_rejected';
-export type ButtonType = 'url' | 'webapp' | 'reschedule' | 'pay';
-export interface ChainButton { type: ButtonType; text: string; url?: string }
+/** next — faqat sxemadagi «Xabar» blokida: lid shu tugmaning chizig'i bo'ylab keyingi blokka o'tadi (id — server beradi). */
+export type ButtonType = 'url' | 'webapp' | 'reschedule' | 'pay' | 'next';
+export interface ChainButton { type: ButtonType; text: string; url?: string; id?: string }
 
 export interface ChainMessage {
   id: number;
@@ -112,11 +113,16 @@ export interface ChainMessage {
   required: boolean;
   status: 'active' | 'draft';
   sort: number;
+  /** sxemadagi «Xabar» yoki «Zanjir» blokiga tegishli bo'lsa — blok id si (oddiy zanjirda null) */
+  flow_node_id?: number | null;
   updated_at: string; updated_by: string | null;
   stats?: { sent: number; clicks: number; blocked_after: number };
   warnings?: string[];
 }
 export type ChainMessageInput = Omit<ChainMessage, 'id' | 'updated_at' | 'updated_by' | 'stats' | 'warnings'>;
+/** Sxemadagi «Xabar» blokining xabari: trigger_type = 'flow' (vaqtni sxema belgilaydi). */
+export type FlowMessage = Omit<ChainMessage, 'trigger_type'> & { trigger_type: TriggerType | 'flow' };
+export type FlowMessageInput = Omit<ChainMessageInput, 'trigger_type'> & { trigger_type: TriggerType | 'flow' };
 // GET    /api/admin/funnels/{id}/chain -> ChainMessage[]
 // POST   /api/admin/funnels/{id}/chain  body: ChainMessageInput -> ChainMessage
 // PUT    /api/admin/chain/{mid} body: same -> ChainMessage
@@ -178,6 +184,16 @@ export interface LeadCard extends LeadRow {
   contacts: { at: string; manager: string; result: ContactResult; callback_at: string | null; note: string }[];
   events: LeadEvent[];
   messages: { at: string; title: string; status: string }[];
+  tags?: string[];
+  flow_runs?: LeadFlowRun[];
+}
+/** Lidning sxemadagi yo'llari (oxirgi 20 tasi). */
+export interface LeadFlowRun {
+  id: number; flow_id: number; flow_name: string;
+  node_title: string | null; node_type: FlowNodeType | null;
+  status: 'active' | 'waiting' | 'done' | 'stopped';
+  waiting_for: 'button' | 'time' | 'event' | 'chain' | null;
+  wait_until: string | null; started_at: string; updated_at: string; reason: string | null;
 }
 export type ContactResult = 'no_answer' | 'callback' | 'sold' | 'refused';
 // GET  /api/admin/leads/{id} -> LeadCard
@@ -294,3 +310,77 @@ export type DashboardPeriod = 'today' | '7d' | '30d';
 /** GET /api/admin/chat/sessions elementi. */
 export interface ChatSession { day: 1 | 2; at: string; count: number; unanswered: number }
 export type ChatStatusFilter = 'all' | 'unanswered';
+
+// ── Progrev sxemasi (bloklar va chiziqlar) ──
+export type FlowNodeType = 'start' | 'message' | 'wait' | 'condition' | 'action' | 'goto' | 'chain' | 'stop' | 'note';
+export type FlowStartEvent =
+  | 'start' | 'phone' | 'session_chosen' | 'joined' | 'left_live' | 'day_end' | 'reached_offer'
+  | 'clicked_buy' | 'receipt' | 'payment_approved' | 'payment_rejected' | 'question';
+export type FlowWaitEvent = 'joined' | 'question' | 'receipt' | 'clicked_buy' | 'payment_approved';
+export type FlowAnchor = 'day1_start' | 'day1_end' | 'day2_start' | 'day2_end' | 'offer' | 'deadline';
+export type FlowCheck = 'watch' | 'joined' | 'reached_offer' | 'wrote_admin' | 'clicked_buy' | 'receipt' | 'payment' | 'tag' | 'source';
+export type FlowAction = 'reschedule' | 'ask' | 'tag_add' | 'tag_remove' | 'cold' | 'manager_task';
+export interface WatchBranch { id: string; label: string; kind: 'not_joined' | 'range'; from_min?: number; to_min?: number | null }
+
+/** Har bir blok turining sozlamasi (config). */
+export interface FlowConfig {
+  // start
+  event?: FlowStartEvent | FlowWaitEvent;
+  day?: 1 | 2;
+  // message
+  timeout_minutes?: number | null;
+  paid_ok?: boolean;
+  // wait
+  mode?: 'duration' | 'anchor' | 'clock' | 'event';
+  minutes?: number;
+  anchor?: FlowAnchor;
+  direction?: 'before' | 'after';
+  clock?: string;
+  max_minutes?: number;
+  quiet?: boolean;
+  late?: 'skip' | 'send';
+  // condition
+  check?: FlowCheck;
+  branches?: WatchBranch[];
+  value?: string;
+  // action
+  action?: FlowAction;
+  // goto
+  target_node_id?: number | null;
+  item?: number;
+  // stop
+  tag?: string;
+  // note
+  text?: string;
+}
+
+export interface FlowSection {
+  id: number; funnel_id: number; name: string; status: 'active' | 'draft'; sort: number;
+  updated_at: string; updated_by: string | null;
+  nodes: number;          // bloklar soni
+  active_leads: number;   // hozir shu bo'limda yurgan lidlar
+}
+export interface FlowNode {
+  id: number; flow_id: number; type: FlowNodeType; title: string; x: number; y: number;
+  config: FlowConfig;
+  ports: string[];             // chiqishlar: next | b:<tugma id> | timeout | <shoxcha id> | else | yes | no | done | expired ...
+  messages: FlowMessage[];     // message — 1 ta, chain — zanjir xabarlari (tartib bilan)
+  warnings: string[];
+}
+export interface FlowEdge { id: number; flow_id: number; from_node_id: number; from_port: string; to_node_id: number; to_item: number }
+/** entered — tanlangan davrda blokka kirganlar; here — hozir shu blokda kutayotganlar; ports — qaysi chiqishdan chiqqanlar. */
+export interface FlowNodeStats { entered: number; here: number; ports: Record<string, number> }
+export interface FlowGraph { flow: FlowSection; nodes: FlowNode[]; edges: FlowEdge[]; stats: Record<string, FlowNodeStats>; days: number }
+export interface FlowTarget { id: number; flow_id: number; flow_name: string; type: FlowNodeType; title: string; items: string[] }
+export type FlowImportPhase = 'reg' | 'day1' | 'between' | 'day2' | 'after';
+// GET    /api/admin/funnels/{id}/flows -> FlowSection[]
+// POST   /api/admin/funnels/{id}/flows {name} -> FlowSection (qoralama, «Boshlanish» bloki bilan)
+// POST   /api/admin/funnels/{id}/flows/example -> FlowSection (namuna, qoralama)
+// POST   /api/admin/funnels/{id}/flows/import {phase} -> FlowSection & {moved_messages, moved_leads}
+// PUT    /api/admin/flows/{id} {name?, status?, sort?} -> FlowSection ; DELETE /api/admin/flows/{id}
+// GET    /api/admin/flows/{id}?days=7 -> FlowGraph
+// POST   /api/admin/flows/{id}/nodes {type, x, y, title?, config?} -> FlowNode
+// PUT    /api/admin/flow-nodes/{id} {title?, x?, y?, config?} -> FlowNode ; DELETE ; POST .../duplicate -> FlowNode
+// POST   /api/admin/flows/{id}/edges {from_node_id, from_port, to_node_id, to_item} -> FlowEdge ; DELETE /api/admin/flow-edges/{id}
+// GET    /api/admin/funnels/{id}/flow-targets -> FlowTarget[]
+// Xabar matni: PUT /api/admin/chain/{mid} (FlowMessageInput); zanjirga xabar: POST /api/admin/funnels/{id}/chain {..., flow_node_id}

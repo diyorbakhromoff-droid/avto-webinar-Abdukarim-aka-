@@ -106,12 +106,14 @@ export const BUTTON_TYPE_LABEL: Record<ButtonType, string> = {
   webapp: 'Efirga kirish (Mini App)',
   reschedule: "Vaqtni o'zgartirish",
   pay: "To'lov / kursga yozilish",
+  next: 'Sxemada keyingi blok',
 };
 export const BUTTON_DEFAULT_TEXT: Record<ButtonType, string> = {
   url: 'Batafsil',
   webapp: 'Efirga kirish',
   reschedule: "Vaqtni o'zgartirish",
   pay: 'Kursga yozilish',
+  next: 'Davom etish',
 };
 
 export const STEP_LABEL: Record<LeadStep, string> = {

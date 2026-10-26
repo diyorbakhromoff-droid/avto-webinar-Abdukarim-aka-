@@ -356,6 +356,45 @@ function Events({ lead }: { lead: LeadCard }) {
   );
 }
 
+const RUN_STATUS: Record<string, { label: string; tone: Tone }> = {
+  waiting: { label: 'kutmoqda', tone: 'warn' }, active: { label: 'yurmoqda', tone: 'warn' },
+  done: { label: 'tugadi', tone: 'success' }, stopped: { label: "to'xtadi", tone: 'neutral' },
+};
+const WAITING_FOR: Record<string, string> = { button: 'tugma bosishini', time: 'vaqtni', event: 'harakatini', chain: 'zanjir xabarlarini' };
+
+/** Progrev sxemasida lid qayerda (bo'limlar bo'yicha). */
+function FlowRuns({ lead }: { lead: LeadCard }) {
+  const runs = lead.flow_runs ?? [];
+  const tags = lead.tags ?? [];
+  if (!runs.length && !tags.length) return null;
+  return (
+    <Card title="Progrev sxemasida">
+      {tags.length > 0 && <div className="row">{tags.map((t) => <Badge key={t} tone="info">#{t}</Badge>)}</div>}
+      {runs.length > 0 && (
+        <ul className="plain-list" style={{ listStyle: 'none', padding: 0 }}>
+          {runs.map((r) => {
+            const s = RUN_STATUS[r.status] ?? { label: r.status, tone: 'neutral' as Tone };
+            return (
+              <li key={r.id} className="stack-sm" style={{ gap: 2, padding: '8px 0', borderBottom: '1px solid var(--line-2)' }}>
+                <div className="row-between">
+                  <Link to={`/chain?bolim=${r.flow_id}`}><b>{r.flow_name}</b></Link>
+                  <Badge tone={s.tone}>{s.label}</Badge>
+                </div>
+                <div className="small">
+                  {r.node_title ?? '—'}
+                  {r.status === 'waiting' && r.waiting_for ? ` · ${WAITING_FOR[r.waiting_for] ?? ''} kutyapti` : ''}
+                  {r.status === 'waiting' && r.wait_until ? ` (${fmtDateTime(r.wait_until)} gacha)` : ''}
+                </div>
+                <div className="small muted">boshlandi {fmtDateTime(r.started_at)}{r.reason && r.status !== 'waiting' ? ` · ${r.reason}` : ''}</div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </Card>
+  );
+}
+
 function Messages({ lead }: { lead: LeadCard }) {
   if (!lead.messages.length) return null;
   const list = [...lead.messages].sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
@@ -420,6 +459,7 @@ export default function LeadCardPage() {
                 <PaymentBlock lead={l} reload={reload} />
                 <ContactBlock lead={l} reload={reload} />
                 <ManagerBlock lead={l} reload={reload} />
+                <FlowRuns lead={l} />
               </div>
               <div className="stack" style={{ flex: '3 1 420px', gap: 20 }}>
                 <Events lead={l} />

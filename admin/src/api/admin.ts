@@ -6,6 +6,8 @@ import type {
   GlobalSettings, LeadCard, LeadMessageInput, LeadStep, LeadsPage, LiveResults, LoginResponse,
   MediaInfo, PaymentKind, PaymentMethod, PaymentRow, PaymentsStatusFilter, QuestionRow, Requisites,
   SettingsSaveResponse, SimulationRow, StatsResponse, TariffAdmin, UserInput, WatchStats,
+  FlowConfig, FlowEdge, FlowGraph, FlowImportPhase, FlowMessage, FlowMessageInput, FlowNode, FlowNodeType, FlowSection,
+  FlowTarget,
 } from './types';
 
 export interface LeadsFilter {
@@ -94,6 +96,28 @@ export const api = {
   chainHistory: (id: number) => http.get<ChainHistoryEntry[]>(`/admin/chain/${id}/history`),
   simulate: (fid: number, body: { registered_at: string; day1_at: string }) =>
     http.post<SimulationRow[]>(`/admin/funnels/${fid}/chain/simulate`, body),
+
+  // ── Progrev sxemasi ──
+  flows: (fid: number) => http.get<FlowSection[]>(`/admin/funnels/${fid}/flows`),
+  createFlow: (fid: number, name: string) => http.post<FlowSection>(`/admin/funnels/${fid}/flows`, { name }),
+  createExampleFlow: (fid: number) => http.post<FlowSection>(`/admin/funnels/${fid}/flows/example`),
+  importFlow: (fid: number, phase: FlowImportPhase) =>
+    http.post<FlowSection & { moved_messages: number; moved_leads: number }>(`/admin/funnels/${fid}/flows/import`, { phase }),
+  updateFlow: (id: number, body: { name?: string; status?: 'active' | 'draft'; sort?: number }) => http.put<FlowSection>(`/admin/flows/${id}`, body),
+  deleteFlow: (id: number) => http.del(`/admin/flows/${id}`),
+  flowGraph: (id: number, days: number) => http.get<FlowGraph>(`/admin/flows/${id}`, { days }),
+  createNode: (flowId: number, body: { type: FlowNodeType; x: number; y: number; title?: string; config?: FlowConfig }) =>
+    http.post<FlowNode>(`/admin/flows/${flowId}/nodes`, body),
+  updateNode: (id: number, body: { title?: string; x?: number; y?: number; config?: FlowConfig }) => http.put<FlowNode>(`/admin/flow-nodes/${id}`, body),
+  duplicateNode: (id: number) => http.post<FlowNode>(`/admin/flow-nodes/${id}/duplicate`),
+  deleteNode: (id: number) => http.del(`/admin/flow-nodes/${id}`),
+  createEdge: (flowId: number, body: { from_node_id: number; from_port: string; to_node_id: number; to_item: number }) =>
+    http.post<FlowEdge>(`/admin/flows/${flowId}/edges`, body),
+  deleteEdge: (id: number) => http.del(`/admin/flow-edges/${id}`),
+  flowTargets: (fid: number) => http.get<FlowTarget[]>(`/admin/funnels/${fid}/flow-targets`),
+  updateFlowMessage: (id: number, m: FlowMessageInput) => http.put<FlowMessage>(`/admin/chain/${id}`, m),
+  createChainItem: (fid: number, nodeId: number, m: ChainMessageInput) =>
+    http.post<FlowMessage>(`/admin/funnels/${fid}/chain`, { ...m, flow_node_id: nodeId }),
 
   // ── Media ──
   uploadMedia: (file: File) => {

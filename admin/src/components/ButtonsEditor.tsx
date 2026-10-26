@@ -20,26 +20,33 @@ export function validateButtons(rows: ChainButton[][]): string | null {
 /** Bo'sh qatorlarni olib tashlaydi. */
 export function cleanButtons(rows: ChainButton[][]): ChainButton[][] {
   return rows
-    .map((r) => r.map((b) => (b.type === 'url' ? { type: b.type, text: b.text.trim(), url: (b.url ?? '').trim() } : { type: b.type, text: b.text.trim() })))
+    .map((r) => r.map((b): ChainButton => {
+      if (b.type === 'url') return { type: b.type, text: b.text.trim(), url: (b.url ?? '').trim() };
+      // «keyingi blok» tugmasining id si saqlanadi — sxemadagi chiziq unga ulangan
+      if (b.type === 'next') return b.id ? { type: b.type, text: b.text.trim(), id: b.id } : { type: b.type, text: b.text.trim() };
+      return { type: b.type, text: b.text.trim() };
+    }))
     .filter((r) => r.length > 0);
 }
 
-export function ButtonsEditor({ value, onChange, idPrefix = 'btn' }: { value: ChainButton[][]; onChange: (v: ChainButton[][]) => void; idPrefix?: string }) {
+/** allowNext — sxemadagi «Xabar» bloki: «Sxemada keyingi blok» turi ham tanlanadi. */
+export function ButtonsEditor({ value, onChange, idPrefix = 'btn', allowNext = false }: { value: ChainButton[][]; onChange: (v: ChainButton[][]) => void; idPrefix?: string; allowNext?: boolean }) {
+  const typeOptions = options(BUTTON_TYPE_LABEL).filter((o) => allowNext || o.value !== 'next');
   const update = (ri: number, bi: number, patch: Partial<ChainButton>) => {
     onChange(value.map((row, r) => (r !== ri ? row : row.map((b, i) => (i !== bi ? b : { ...b, ...patch })))));
   };
   const changeType = (ri: number, bi: number, type: ButtonType) => {
     const cur = value[ri][bi];
     const wasDefault = !cur.text || Object.values(BUTTON_DEFAULT_TEXT).includes(cur.text);
-    update(ri, bi, { type, text: wasDefault ? BUTTON_DEFAULT_TEXT[type] : cur.text, url: type === 'url' ? cur.url ?? '' : undefined });
+    update(ri, bi, { type, text: wasDefault ? BUTTON_DEFAULT_TEXT[type] : cur.text, url: type === 'url' ? cur.url ?? '' : undefined, id: type === 'next' ? cur.id : undefined });
   };
   const remove = (ri: number, bi: number) => {
     onChange(value.map((row, r) => (r !== ri ? row : row.filter((_, i) => i !== bi))).filter((r) => r.length > 0));
   };
   const addToRow = (ri: number) => {
-    onChange(value.map((row, r) => (r !== ri ? row : [...row, { type: 'url', text: '', url: '' }])));
+    onChange(value.map((row, r) => (r !== ri ? row : [...row, allowNext ? { type: 'next', text: '' } : { type: 'url', text: '', url: '' }])));
   };
-  const addRow = () => onChange([...value, [{ type: 'webapp', text: BUTTON_DEFAULT_TEXT.webapp }]]);
+  const addRow = () => onChange([...value, [allowNext ? { type: 'next', text: BUTTON_DEFAULT_TEXT.next } : { type: 'webapp', text: BUTTON_DEFAULT_TEXT.webapp }]]);
 
   return (
     <div className="buttons-editor">
@@ -54,7 +61,7 @@ export function ButtonsEditor({ value, onChange, idPrefix = 'btn' }: { value: Ch
                 <label className="field field-compact">
                   <span>Turi</span>
                   <select id={`${id}-type`} className="select" value={b.type} onChange={(e) => changeType(ri, bi, e.target.value as ButtonType)}>
-                    {options(BUTTON_TYPE_LABEL).map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    {typeOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
                   </select>
                 </label>
                 <label className="field field-compact grow">
@@ -79,7 +86,10 @@ export function ButtonsEditor({ value, onChange, idPrefix = 'btn' }: { value: Ch
       {value.length < MAX_ROWS && (
         <button type="button" className="btn btn-sm" onClick={addRow}>+ Tugmalar qatori</button>
       )}
-      <div className="muted small">«Efirga kirish», «Vaqtni o'zgartirish» va «To'lov» tugmalarining havolasini bot o'zi qo'yadi.</div>
+      <div className="muted small">
+        «Efirga kirish», «Vaqtni o'zgartirish» va «To'lov» tugmalarining havolasini bot o'zi qo'yadi.
+        {allowNext && " «Sxemada keyingi blok» tugmasidan sxemada alohida chiziq chiqadi — uni kerakli blokka ulang."}
+      </div>
     </div>
   );
 }

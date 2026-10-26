@@ -9,7 +9,10 @@ import type {
   ChainMessageInput, ChatRow, ChatSession, CommentRow, ContactResult, DashboardResponse, FailedMessage, Funnel,
   FunnelSettings, GlobalSettings, LeadCard, LeadEvent, LeadRow, LeadStep, LiveResults, MediaInfo, PaymentKind,
   PaymentMethod, PaymentRow, QuestionRow, Requisites, SimulationRow, StatsResponse, TariffAdmin, WatchBucket, WatchStats,
+  ChainButton, FlowConfig, FlowEdge, FlowGraph, FlowImportPhase, FlowMessage, FlowNode, FlowNodeType, FlowSection, FlowTarget,
 } from './types';
+import { NODE_LABEL, portsOf } from '../lib/flow';
+import { phaseOf } from '../lib/chain';
 import { CALL_LIST_FALLBACK, MINUTE_SEGMENTS, STEP_LABEL, WATCH_SEGMENTS } from '../lib/labels';
 import { DAY_TRIGGERS, audienceShort, whenLabel } from '../lib/chain';
 import { dayKey, pad2, tzParts, tzToUtc } from '../lib/time';
@@ -530,12 +533,15 @@ function validateChain(m: ChainMessageInput) {
   if (errors.length) throw new ApiError(400, errors.join('; '));
 }
 
-on('GET', '/admin/funnels/:id/chain', (c) => chain[n(c.m[1])] ?? []);
+/** «Keyingi blok» tugmalariga id (backend ensure_button_ids). */
+const withIds = (rows: ChainButton[][]) => rows.map((r) => r.map((x) => (x.type === 'next' ? { ...x, id: x.id || Math.random().toString(16).slice(2, 8) } : x)));
+
+on('GET', '/admin/funnels/:id/chain', (c) => (chain[n(c.m[1])] ?? []).filter((m) => !m.flow_node_id));
 on('POST', '/admin/funnels/:id/chain', (c) => {
   need(c, 'super_admin', 'content');
   const body = b<ChainMessageInput>(c);
   validateChain(body);
-  const m: ChainMessage = { ...body, id: nextId(), updated_at: iso(Date.now()), updated_by: c.user.name, warnings: honestyWarnings(body.text) };
+  const m: ChainMessage = { ...body, buttons: withIds(body.buttons), id: nextId(), updated_at: iso(Date.now()), updated_by: c.user.name, warnings: honestyWarnings(body.text) };
   (chain[n(c.m[1])] ??= []).push(m);
   chainHistory[m.id] = [{ at: m.updated_at, user: c.user.name, changes: { title: [null, m.title] } }];
   return m;
@@ -550,7 +556,8 @@ on('PUT', '/admin/chain/:id', (c) => {
     const old = (m as unknown as Record<string, unknown>)[k];
     if (JSON.stringify(old) !== JSON.stringify(v)) changes[k] = [old, v];
   }
-  Object.assign(m, body, { updated_at: iso(Date.now()), updated_by: c.user.name, warnings: honestyWarnings(body.text) });
+  Object.assign(m, body, { buttons: withIds(body.buttons), flow_node_id: m.flow_node_id ?? null, updated_at: iso(Date.now()), updated_by: c.user.name, warnings: honestyWarnings(body.text) });
+  if (m.flow_node_id) pruneEdges(m.flow_node_id);
   if (Object.keys(changes).length) (chainHistory[m.id] ??= []).push({ at: m.updated_at, user: c.user.name, changes });
   return m;
 });
@@ -572,6 +579,194 @@ on('POST', '/admin/chain/:id/test', (c) => {
   findMsg(n(c.m[1]));
   return { ok: true };
 });
+
+// ── progrev sxemasi ──
+type StoredNode = Omit<FlowNode, 'ports' | 'messages' | 'warnings'>;
+const flowSections: Record<number, FlowSection[]> = {};
+const flowNodes: StoredNode[] = [];
+const flowEdges: FlowEdge[] = [];
+const flowSec = (id: number) => Object.values(flowSections).flat().find((f) => f.id === id) ?? notFound();
+const flowMsgs = (nodeId: number) => Object.values(chain).flat().filter((m) => m.flow_node_id === nodeId).sort((a, z) => a.sort - z.sort || a.id - z.id);
+function nodeOut(s: StoredNode): FlowNode {
+  const msgs = flowMsgs(s.id) as FlowMessage[];
+  const warnings: string[] = [];
+  if (s.type === 'message' && (!msgs[0] || (!msgs[0].text.trim() && !msgs[0].media_ids.length))) warnings.push("Xabar matni yo'q");
+  if (s.type === 'chain' && !msgs.some((m) => m.status === 'active')) warnings.push("Zanjirda faol xabar yo'q");
+  if (s.type === 'goto' && !s.config.target_node_id) warnings.push("Qayerga o'tishi tanlanmagan");
+  return { ...clone(s), ports: portsOf(s.type, s.config, s.type === 'message' ? msgs[0]?.buttons ?? [] : []), messages: clone(msgs), warnings };
+}
+function pruneEdges(nodeId: number) {
+  const s = flowNodes.find((x) => x.id === nodeId);
+  if (!s) return;
+  const ports = nodeOut(s).ports;
+  for (let i = flowEdges.length - 1; i >= 0; i--) if (flowEdges[i].from_node_id === nodeId && !ports.includes(flowEdges[i].from_port)) flowEdges.splice(i, 1);
+}
+function counts(f: FlowSection): FlowSection {
+  return { ...f, nodes: flowNodes.filter((x) => x.flow_id === f.id).length };
+}
+function newSection(fid: number, name: string, user: string, status: 'active' | 'draft' = 'draft'): FlowSection {
+  const list = (flowSections[fid] ??= []);
+  const f: FlowSection = { id: nextId(), funnel_id: fid, name, status, sort: list.length + 1, updated_at: iso(Date.now()), updated_by: user, nodes: 0, active_leads: 0 };
+  list.push(f);
+  return f;
+}
+function addNode(flowId: number, type: FlowNodeType, title: string, x: number, y: number, config: FlowConfig): StoredNode {
+  const s: StoredNode = { id: nextId(), flow_id: flowId, type, title, x, y, config };
+  flowNodes.push(s);
+  return s;
+}
+function addMsg(fid: number, nodeId: number, title: string, text: string, buttons: ChainButton[][] = [], extra: Partial<ChainMessage> = {}) {
+  (chain[fid] ??= []).push({
+    id: nextId(), title, kind: 'text', text, media_ids: [], buttons: withIds(buttons), trigger_type: 'flow' as never, trigger_day: null,
+    offset_minutes: 0, stuck_step: null, button_key: null, segment: 'all', segment_day: null, segment_minute: null,
+    required: false, status: 'active', sort: 0, flow_node_id: nodeId, updated_at: iso(Date.now()), updated_by: 'Demo', ...extra,
+  });
+}
+const link = (flowId: number, a: StoredNode, port: string, z: StoredNode, item = 0) =>
+  flowEdges.push({ id: nextId(), flow_id: flowId, from_node_id: a.id, from_port: port, to_node_id: z.id, to_item: item });
+
+on('GET', '/admin/funnels/:id/flows', (c) => (flowSections[n(c.m[1])] ?? []).map(counts));
+on('POST', '/admin/funnels/:id/flows', (c) => {
+  need(c, 'super_admin', 'content');
+  const f = newSection(n(c.m[1]), b<{ name: string }>(c).name, c.user.name);
+  addNode(f.id, 'start', 'Boshlanish', 40, 160, { event: 'day_end', day: 1 });
+  return counts(f);
+});
+on('POST', '/admin/funnels/:id/flows/example', (c) => {
+  need(c, 'super_admin', 'content');
+  const fid = n(c.m[1]);
+  const f = newSection(fid, '1-kundan keyin (namuna)', c.user.name);
+  const half = Math.round((settings[fid]?.day1_duration_sec ?? 7200) / 120);
+  const br = [
+    { id: 'nj', label: 'Umuman kirmadi', kind: 'not_joined' as const },
+    { id: 'half', label: `${half}-daqiqagacha ko'rdi`, kind: 'range' as const, from_min: 0, to_min: half },
+    { id: 'more', label: `${half}-daqiqadan ko'p`, kind: 'range' as const, from_min: half, to_min: null },
+  ];
+  const st = addNode(f.id, 'start', '1-kun efiri tugadi', 40, 330, { event: 'day_end', day: 1 });
+  const cond = addNode(f.id, 'condition', "Videoni qancha ko'rdi?", 330, 300, { check: 'watch', day: 1, branches: br });
+  const m1 = addNode(f.id, 'message', 'Efirga kira olmadingiz', 660, 40, { timeout_minutes: 180, paid_ok: false });
+  addMsg(fid, m1.id, m1.title, "{ism}, kechagi darsni ko'ra olmadingiz. Yozuv yana bir marta ochiladi — qulay vaqtni tanlang.",
+    [[{ type: 'next', text: 'Vaqt tanlayman', id: 'vt1' }], [{ type: 'next', text: 'Qiziq emas', id: 'qe1' }]]);
+  const res = addNode(f.id, 'action', 'Yangi vaqt tanlash', 1000, 0, { action: 'reschedule' });
+  const stop = addNode(f.id, 'stop', 'Teg: qiziqmaydi', 1000, 110, { tag: 'qiziqmaydi' });
+  const m2 = addNode(f.id, 'message', 'Joyingiz saqlanmoqda', 1000, 220, { timeout_minutes: 1440, paid_ok: false });
+  addMsg(fid, m2.id, m2.title, '{ism}, joyingiz hali saqlanmoqda. Qaysi vaqt qulay — tanlang.', [[{ type: 'next', text: 'Vaqt tanlayman', id: 'vt2' }]]);
+  const res2 = addNode(f.id, 'action', 'Yangi vaqt tanlash', 1340, 220, { action: 'reschedule' });
+  const cold = addNode(f.id, 'action', "Sovuq lidlarga o'tkazish", 1340, 330, { action: 'cold' });
+  const m3 = addNode(f.id, 'message', 'Eng kuchli qismi oldinda', 660, 420, { timeout_minutes: 180, paid_ok: false });
+  addMsg(fid, m3.id, m3.title, "{ism}, darsning eng muhim qismi oldinda edi. 2-kunda uni qisqacha takrorlaymiz.", [[{ type: 'next', text: 'Ha, 2-kunga boraman', id: 'ha3' }]]);
+  const go = addNode(f.id, 'goto', '2-kun zanjiriga', 1000, 470, { target_node_id: null, item: 0 });
+  addNode(f.id, 'note', 'Izoh', 1000, 570, { text: "«Kunlar bo'yicha»dagi «2-kun» ustunini sxemaga ko'chiring va «2-kun zanjiriga» blokida uni tanlang." });
+  const m4 = addNode(f.id, 'message', '1-kun xulosasi', 660, 740, { timeout_minutes: 120, paid_ok: false });
+  addMsg(fid, m4.id, m4.title, "{ism}, bugun qatnashganingiz uchun rahmat! Savolingiz bo'lsa, shu yerda yozing.", [[{ type: 'next', text: 'Savolim bor', id: 'sb4' }]]);
+  const ask = addNode(f.id, 'action', "Savol so'rash", 1000, 740, { action: 'ask' });
+  const wrote = addNode(f.id, 'condition', 'Adminga yozdimi?', 1000, 850, { check: 'wrote_admin', minutes: 120 });
+  const task = addNode(f.id, 'action', "Menejerga vazifa: qo'ng'iroq", 1340, 840, { action: 'manager_task', value: "Qo'ng'iroq qiling" });
+  const m5 = addNode(f.id, 'message', 'Savolingiz bormi?', 1340, 950, { timeout_minutes: null, paid_ok: false });
+  addMsg(fid, m5.id, m5.title, 'Uyalmang — jamoamiz har bir savolga shaxsan javob beradi.');
+  link(f.id, st, 'next', cond); link(f.id, cond, 'nj', m1); link(f.id, cond, 'half', m3); link(f.id, cond, 'more', m4);
+  link(f.id, m1, 'b:vt1', res); link(f.id, m1, 'b:qe1', stop); link(f.id, m1, 'timeout', m2);
+  link(f.id, m2, 'b:vt2', res2); link(f.id, m2, 'timeout', cold); link(f.id, m3, 'b:ha3', go);
+  link(f.id, m4, 'b:sb4', ask); link(f.id, m4, 'timeout', wrote); link(f.id, wrote, 'yes', task); link(f.id, wrote, 'no', m5);
+  return counts(f);
+});
+on('POST', '/admin/funnels/:id/flows/import', (c) => {
+  need(c, 'super_admin', 'content');
+  const fid = n(c.m[1]);
+  const phase = b<{ phase: FlowImportPhase }>(c).phase;
+  const titles: Record<FlowImportPhase, string> = { reg: "Ro'yxatdan keyin", day1: '1-kun eslatmalari', between: 'Kunlar orasi', day2: '2-kun zanjiri', after: '2-kundan keyin' };
+  const msgs = (chain[fid] ?? []).filter((m) => !m.flow_node_id && m.trigger_type !== 'left_live' && phaseOf(m) === phase);
+  if (!msgs.length) throw new ApiError(400, "Bu ustunda ko'chiriladigan xabar yo'q");
+  const f = newSection(fid, titles[phase], c.user.name, 'active');
+  const st = addNode(f.id, 'start', 'Efir vaqtini tanladi', 40, 160, { event: 'session_chosen' });
+  const ch = addNode(f.id, 'chain', titles[phase], 360, 120, {});
+  link(f.id, st, 'next', ch);
+  msgs.forEach((m, i) => Object.assign(m, { flow_node_id: ch.id, sort: i }));
+  return { ...counts(f), moved_messages: msgs.length, moved_leads: 0 };
+});
+on('PUT', '/admin/flows/:id', (c) => {
+  need(c, 'super_admin', 'content');
+  const f = flowSec(n(c.m[1]));
+  Object.assign(f, b<Partial<FlowSection>>(c), { updated_at: iso(Date.now()), updated_by: c.user.name });
+  return counts(f);
+});
+on('DELETE', '/admin/flows/:id', (c) => {
+  need(c, 'super_admin', 'content');
+  const f = flowSec(n(c.m[1]));
+  flowSections[f.funnel_id] = flowSections[f.funnel_id].filter((x) => x.id !== f.id);
+  return undefined;
+});
+on('GET', '/admin/flows/:id', (c) => {
+  const f = flowSec(n(c.m[1]));
+  const nodes = flowNodes.filter((x) => x.flow_id === f.id).map(nodeOut);
+  const stats: FlowGraph['stats'] = {};
+  if (f.status === 'active') {
+    for (const nd of nodes) {
+      const entered = 20 + (nd.id % 17) * 3;
+      stats[String(nd.id)] = { entered, here: nd.type === 'message' ? nd.id % 5 : 0, ports: Object.fromEntries(nd.ports.map((p, i) => [p, Math.round(entered / (i + 2))])) };
+    }
+  }
+  return { flow: counts(f), nodes, edges: clone(flowEdges.filter((e) => e.flow_id === f.id)), stats, days: n(c.q.days ?? '7') } satisfies FlowGraph;
+});
+on('POST', '/admin/flows/:id/nodes', (c) => {
+  need(c, 'super_admin', 'content');
+  const f = flowSec(n(c.m[1]));
+  const body = b<{ type: FlowNodeType; x: number; y: number; title?: string; config?: FlowConfig }>(c);
+  const defaults: Partial<Record<FlowNodeType, FlowConfig>> = {
+    start: { event: 'day_end', day: 1 }, message: { timeout_minutes: null, paid_ok: false }, wait: { mode: 'duration', minutes: 60, quiet: true, late: 'skip' },
+    condition: { check: 'watch', day: 1, branches: [{ id: 'nj' + nextId(), label: 'Umuman kirmadi', kind: 'not_joined' }, { id: 'r' + nextId(), label: "Ko'rgan", kind: 'range', from_min: 0, to_min: null }] },
+    action: { action: 'reschedule' }, goto: { target_node_id: null, item: 0 }, stop: { tag: '' }, note: { text: '' },
+  };
+  const s = addNode(f.id, body.type, body.title ?? NODE_LABEL[body.type], body.x, body.y, body.config ?? defaults[body.type] ?? {});
+  if (body.type === 'message') addMsg(f.funnel_id, s.id, s.title, '', [], { status: 'draft' });
+  return nodeOut(s);
+});
+on('PUT', '/admin/flow-nodes/:id', (c) => {
+  need(c, 'super_admin', 'content');
+  const s = flowNodes.find((x) => x.id === n(c.m[1])) ?? notFound();
+  Object.assign(s, b<Partial<StoredNode>>(c));
+  pruneEdges(s.id);
+  return nodeOut(s);
+});
+on('POST', '/admin/flow-nodes/:id/duplicate', (c) => {
+  need(c, 'super_admin', 'content');
+  const s = flowNodes.find((x) => x.id === n(c.m[1])) ?? notFound();
+  const copy = addNode(s.flow_id, s.type, `${s.title} (nusxa)`, s.x + 40, s.y + 40, clone(s.config));
+  const fid = flowSec(s.flow_id).funnel_id;
+  for (const m of flowMsgs(s.id)) chain[fid].push({ ...clone(m), id: nextId(), flow_node_id: copy.id, status: 'draft' });
+  return nodeOut(copy);
+});
+on('DELETE', '/admin/flow-nodes/:id', (c) => {
+  need(c, 'super_admin', 'content');
+  const id = n(c.m[1]);
+  const i = flowNodes.findIndex((x) => x.id === id);
+  if (i >= 0) flowNodes.splice(i, 1);
+  for (let k = flowEdges.length - 1; k >= 0; k--) if (flowEdges[k].from_node_id === id || flowEdges[k].to_node_id === id) flowEdges.splice(k, 1);
+  for (const fid of Object.keys(chain)) chain[n(fid)] = chain[n(fid)].filter((m) => m.flow_node_id !== id);
+  return undefined;
+});
+on('POST', '/admin/flows/:id/edges', (c) => {
+  need(c, 'super_admin', 'content');
+  const body = b<Omit<FlowEdge, 'id' | 'flow_id'>>(c);
+  const src = flowNodes.find((x) => x.id === body.from_node_id), dst = flowNodes.find((x) => x.id === body.to_node_id);
+  if (!src || !dst || dst.type === 'start' || dst.type === 'note') throw new ApiError(400, "Bu blokka chiziq ulab bo'lmaydi");
+  if (!nodeOut(src).ports.includes(body.from_port)) throw new ApiError(400, "Bu chiqish blokda yo'q");
+  const i = flowEdges.findIndex((e) => e.from_node_id === body.from_node_id && e.from_port === body.from_port);
+  if (i >= 0) flowEdges.splice(i, 1);
+  const e: FlowEdge = { id: nextId(), flow_id: n(c.m[1]), ...body, to_item: dst.type === 'chain' ? body.to_item : 0 };
+  flowEdges.push(e);
+  return e;
+});
+on('DELETE', '/admin/flow-edges/:id', (c) => {
+  need(c, 'super_admin', 'content');
+  const i = flowEdges.findIndex((e) => e.id === n(c.m[1]));
+  if (i >= 0) flowEdges.splice(i, 1);
+  return undefined;
+});
+on('GET', '/admin/funnels/:id/flow-targets', (c) => (flowSections[n(c.m[1])] ?? []).flatMap((f) =>
+  flowNodes.filter((x) => x.flow_id === f.id && x.type !== 'start' && x.type !== 'note')
+    .map((x): FlowTarget => ({ id: x.id, flow_id: f.id, flow_name: f.name, type: x.type, title: x.title, items: flowMsgs(x.id).map((m) => m.title) }))));
+
 on('GET', '/admin/chain/:id/history', (c) => {
   const [, m] = findMsg(n(c.m[1]));
   return chainHistory[m.id] ?? [

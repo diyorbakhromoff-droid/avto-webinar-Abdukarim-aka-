@@ -11,6 +11,7 @@ import { Modal } from '../components/Modal';
 import { NeedFunnel } from '../components/NeedFunnel';
 import { TelegramPreview } from '../components/TelegramPreview';
 import { TextEditor } from '../components/TextEditor';
+import { FlowBody } from './Flow';
 import { WatchStatsPanel } from '../components/WatchStatsPanel';
 import { NumberInput } from '../components/fields';
 import { Badge, Empty, ErrorBox, Loading, PageHead } from '../components/ui';
@@ -531,7 +532,7 @@ function ChainBody({ fid }: { fid: number }) {
     const draft = draftFromParams(params, chain.data.reduce((a, m) => Math.max(a, m.sort), 0) + 1);
     if (draft) {
       open(draft, { id: 'new' }, false);
-      setParams({}, { replace: true });
+      setParams({ view: 'days' }, { replace: true });
       setTimeout(() => editorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 120);
       return;
     }
@@ -866,6 +867,21 @@ function ChainBody({ fid }: { fid: number }) {
   );
 }
 
+/** Progrev: yangi sxema (bloklar va chiziqlar) yoki avvalgi "Kunlar bo'yicha" zanjiri. */
 export default function Chain() {
-  return <NeedFunnel>{(f) => <ChainBody key={f.id} fid={f.id} />}</NeedFunnel>;
+  const [params, setParams] = useSearchParams();
+  const view = params.get('view') === 'days' || params.has('new') ? 'days' : 'flow';
+  return (
+    <NeedFunnel>
+      {(f) => (
+        <>
+          <div className="segmented progrev-tabs" role="tablist" aria-label="Progrev ko'rinishi">
+            <button type="button" role="tab" aria-selected={view === 'flow'} className={view === 'flow' ? 'seg seg-on' : 'seg'} onClick={() => setParams({})}>Sxema</button>
+            <button type="button" role="tab" aria-selected={view === 'days'} className={view === 'days' ? 'seg seg-on' : 'seg'} onClick={() => setParams({ view: 'days' })}>Kunlar bo'yicha</button>
+          </div>
+          {view === 'flow' ? <FlowBody key={f.id} fid={f.id} /> : <ChainBody key={f.id} fid={f.id} />}
+        </>
+      )}
+    </NeedFunnel>
+  );
 }
