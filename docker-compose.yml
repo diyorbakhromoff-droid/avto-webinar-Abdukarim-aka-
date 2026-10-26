@@ -77,6 +77,8 @@ services:
       - "443:443"
     volumes:
       - caddydata:/data
+      # shu serverdagi boshqa loyihalarning saytlari (deploy/sites/*.caddy) — gitga kirmaydi, yangilanishda o'chmaydi
+      - ./deploy/sites:/etc/caddy/sites:ro
     depends_on: [api]
     restart: unless-stopped
 

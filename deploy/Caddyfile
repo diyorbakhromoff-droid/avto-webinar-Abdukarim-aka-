@@ -46,3 +46,7 @@
 # eski-app.duckdns.org {
 # 	redir https://{$APP_DOMAIN}{uri} permanent
 # }
+
+# Shu serverdagi boshqa loyihalarning saytlari. Ularni shu faylga emas, deploy/sites/<nom>.caddy ga yozing:
+# bu papka gitga kirmaydi, shuning uchun "git pull" bilan to'qnashmaydi va yangilanishda o'chib ketmaydi.
+import /etc/caddy/sites/*.caddy
