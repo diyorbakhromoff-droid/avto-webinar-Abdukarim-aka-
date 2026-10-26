@@ -24,12 +24,40 @@ Video: Bunny Stream (HLS, tokenli havolalar) — server orqali o'tmaydi
 | `backend/app/api` | Mini App API (`/api/app/*`, initData imzosi) va admin API (`/api/admin/*`, JWT + rollar) |
 | `backend/app/worker` | Navbat (Postgres `FOR UPDATE SKIP LOCKED`), 429/403 ishlovi, davriy vazifalar |
 | `miniapp/` | Efir sahifasi: sinxron pleyer (pauza/o'tkazishsiz), izohlar, sotuv bloki, deadline |
-| `admin/` | Admin panel: progrev muharriri, lidlar va qo'ng'iroq ro'yxatlari, cheklar, statistika |
+| `admin/` | Admin panel: progrev sxemasi va "Kunlar bo'yicha" zanjir, lidlar va qo'ng'iroq ro'yxatlari, cheklar, statistika |
 | `docs/api-contract.ts` | Frontend va backend o'rtasidagi API shartnomasi |
 
 Stack tanlovi bo'yicha bitta farq TZ dan: rejali vazifalar navbati alohida ARQ/Celery emas, PostgreSQL
 jadvalida (`scheduled_messages`). Sabab: xabarlar sessiya vaqti o'zgarganda qayta rejalashtiriladi va
 "bitta xabar bir marta" qoidasi unikal kalit bilan bazada kafolatlanadi; Redis faqat bot holatlari uchun.
+
+## Progrev sxemasi
+
+Admin panel → Progrev zanjiri → **Sxema**. Har bir bo'lim alohida varaq: bloklar va ularni ulovchi chiziqlar.
+
+| Blok | Nima qiladi | Chiqishlari |
+| --- | --- | --- |
+| Boshlanish | Hodisada lid bo'limga kiradi: /start, telefon, efir vaqtini tanladi, efirga kirdi, efirdan chiqdi, efir kuni tugadi, oferta, chek, to'lov, adminga yozdi | keyin |
+| Xabar | Matn/media/tugmalar. «Sxemada keyingi blok» tugmasining o'z chizig'i bor | har bir tugma, «bosmasa» (X vaqtdan keyin) |
+| Kutish | Ma'lum vaqt, webinar vaqtiga bog'lab (masalan, 2-kundan 15 daqiqa oldin), aniq soatgacha yoki biror ish qilguncha | keyin / bo'ldi, vaqt tugadi |
+| Shart | Videoni qancha ko'rdi (daqiqa oraliqlari), efirga kirdimi, ofertagacha ko'rdimi, adminga yozdimi, chek, to'lov, teg, manba | har bir shoxcha / ha, yo'q |
+| Amal | Yangi efir vaqtini taklif qilish, savol so'rash, teg, sovuq lid, menejerga vazifa | keyin |
+| O'tish | Istalgan bo'limning istalgan blokiga, zanjirning N-xabaridan | — |
+| Zanjir | O'z vaqtiga bog'langan xabarlar ketma-ketligi; istalgan xabaridan kirish mumkin | zanjir tugagach |
+| To'xtatish, Izoh | Yo'lni tugatadi (teg bilan) / sxemaga izoh | — |
+
+Qanday ishlaydi (`backend/app/services/flow_engine.py`):
+
+- Bot va API faqat `lead_events` ga voqea yozadi; worker har 3 soniyada yangi voqealarni o'qib, mos bo'limlarni boshlaydi
+  va "biror ish qilguncha" kutayotgan lidlarni davom ettiradi. Har 10 soniyada vaqti kelgan kutishlar keyingi blokka o'tadi.
+- Bir lid bir bo'limda bir vaqtda faqat bitta joyda bo'ladi: bo'lim qayta boshlansa yoki boshqa bo'limdan o'tib kelinsa,
+  eski yo'li to'xtaydi va hali yuborilmagan xabarlari bekor qilinadi.
+- Xabarlar avvalgidek `scheduled_messages` navbati orqali ketadi (tezlik chegarasi, 429/403, tungi tinchlik).
+  To'lagan, bloklagan, xabarlarni to'xtatgan va sovuq lidlarga sxema xabari bormaydi (xabarda "to'laganlarga ham" belgisi bo'lsa — to'laganlarga boradi).
+- Zanjir xabarlari oddiy zanjir qoidalari bilan rejalashtiriladi; efir vaqti o'zgarsa qayta hisoblanadi. Kalitlar oddiy zanjirnikiday,
+  shuning uchun «Kunlar bo'yicha» ustunini sxemaga ko'chirganda xabarlar takrorlanmaydi va yo'qolmaydi.
+- Kutishsiz halqa (masalan, xabar → o'tish → o'sha xabar) 60 qadamdan keyin to'xtatiladi.
+- «Kunlar bo'yicha» zanjiri o'zgarmagan holda ishlashda davom etadi — sxema unga qo'shimcha.
 
 ## Lokal ishga tushirish
 
@@ -111,7 +139,7 @@ O'z domeniga o'tish: `.env` da `APP_DOMAIN`, `ADMIN_DOMAIN`, `MINIAPP_URL`, `ADM
 
 ## Nima tekshirildi va nima tekshirilmadi
 
-- Backend: 38 ta avtomatik test (PostgreSQL bilan), jumladan botning `/start` → telefon → vaqt → tarif →
+- Backend: 66 ta avtomatik test (PostgreSQL bilan), jumladan botning `/start` → telefon → vaqt → tarif →
   chek → guruhda tasdiq oqimi (Telegram so'rovlari soxta sessiyada).
 - Mini App va admin panel haqiqiy API bilan brauzerda (Playwright) ochib ko'rildi: efir sinxron boshlanadi,
   heartbeat va savollar yoziladi, admin paneldagi barcha sahifalar xatosiz yuklanadi.
