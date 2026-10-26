@@ -8,13 +8,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.common import funnel_or_404, iso, parse_iso
 from app.db import get_db
+from app.domain.flow_rules import ensure_button_ids, next_buttons
 from app.domain.honesty import honesty_warnings
 from app.domain.media_rules import validate_message
 from app.domain.planning import SessionTimes, plan_chain
 from app.domain.segments import MINUTE_SEGMENTS, SEGMENTS, WATCH_SEGMENTS
 from app.domain.slots import day2_for
-from app.models import AdminUser, ChainHistory, ChainMessage, Funnel, Media, ScheduledMessage
+from app.models import AdminUser, ChainHistory, ChainMessage, Flow, FlowNode, Funnel, Media, ScheduledMessage
 from app.security.auth import CONTENT
+from app.services import flow_engine
 from app.services.leads import quiet_of
 from app.services.render import Payload, fill, keyboard, send_payload, variables
 from app.services.sessions import chain_item, replan_message
@@ -24,7 +26,9 @@ from app.timeutil import fmt_datetime, now_utc
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
 TRIGGERS = {"after_registration", "before_day", "at_day_start", "after_day_end", "before_deadline", "left_live",
-            "on_button", "stuck"}
+            "on_button", "stuck", "flow"}
+# sxemadagi "Zanjir" blokining xabarlari faqat vaqtga bog'langan bo'ladi ("ro'yxatdan keyin" — "zanjirga kirgach")
+CHAIN_ITEM_TRIGGERS = {"after_registration", "before_day", "at_day_start", "after_day_end", "before_deadline"}
 DAY_TRIGGERS = {"before_day", "at_day_start", "after_day_end", "left_live"}
 KINDS = {"text", "photo", "video", "video_note", "voice", "audio", "document", "album"}
 STUCK_STEPS = {"no_phone", "no_session", "no_receipt", "receipt_rejected"}
@@ -50,10 +54,20 @@ class ChainIn(BaseModel):
     required: bool = False
     status: str = "active"
     sort: int = 0
+    flow_node_id: int | None = None
 
 
-def validate(body: ChainIn) -> None:
+def validate(body: ChainIn, node_type: str | None = None) -> None:
+    """node_type: sxemadagi blok turi (message | chain) yoki None — oddiy zanjir xabari."""
     errors = []
+    if node_type == "message" and body.trigger_type != "flow":
+        errors.append("Sxemadagi xabar bloki vaqtni o'zi belgilamaydi")
+    if node_type == "chain" and body.trigger_type not in CHAIN_ITEM_TRIGGERS:
+        errors.append("Zanjirdagi xabarga vaqt tanlang (zanjirga kirgach, kun oldidan, boshlanishida, tugagach, deadline)")
+    if node_type is None and body.trigger_type == "flow":
+        errors.append("Bu turdagi xabar faqat sxemada bo'ladi")
+    if node_type != "message" and next_buttons(body.buttons):
+        errors.append("«Keyingi blok» tugmasi faqat sxemadagi «Xabar» blokida ishlaydi")
     if body.kind not in KINDS:
         errors.append("Noto'g'ri xabar turi")
     if body.trigger_type not in TRIGGERS:
@@ -105,7 +119,7 @@ async def stats_for(db: AsyncSession, funnel_id: int) -> dict[int, dict]:
 
 
 def out(m: ChainMessage, stats: dict | None = None) -> dict:
-    d = {k: getattr(m, k) for k in ["id"] + EDITABLE}
+    d = {k: getattr(m, k) for k in ["id", "flow_node_id"] + EDITABLE}
     d.update(updated_at=iso(m.updated_at), updated_by=m.updated_by,
              stats=stats or {"sent": 0, "clicks": 0, "blocked_after": 0},
              warnings=honesty_warnings(m.text) + honesty_warnings(m.title))
@@ -114,21 +128,43 @@ def out(m: ChainMessage, stats: dict | None = None) -> dict:
 
 @router.get("/funnels/{fid}/chain")
 async def chain(fid: int, db: AsyncSession = Depends(get_db), _=Depends(CONTENT)):
-    rows = (await db.execute(select(ChainMessage).where(ChainMessage.funnel_id == fid)
+    rows = (await db.execute(select(ChainMessage).where(ChainMessage.funnel_id == fid,
+                                                        ChainMessage.flow_node_id.is_(None))
                              .order_by(ChainMessage.sort, ChainMessage.id))).scalars().all()
     st = await stats_for(db, fid)
     return [out(m, st.get(m.id)) for m in rows]
 
 
+async def flow_node_of(db: AsyncSession, fid: int, node_id: int | None) -> FlowNode | None:
+    if node_id is None:
+        return None
+    node = await db.get(FlowNode, node_id)
+    flow = await db.get(Flow, node.flow_id) if node else None
+    if not flow or flow.funnel_id != fid or node.type not in ("message", "chain"):
+        raise HTTPException(400, "Sxema bloki topilmadi")
+    return node
+
+
+async def replan(db: AsyncSession, m: ChainMessage) -> None:
+    if m.flow_node_id:
+        await flow_engine.replan_node(db, m.flow_node_id)
+    else:
+        await replan_message(db, m)
+
+
 @router.post("/funnels/{fid}/chain")
 async def create(fid: int, body: ChainIn, db: AsyncSession = Depends(get_db), me: AdminUser = Depends(CONTENT)):
     await funnel_or_404(db, fid)
-    validate(body)
-    m = ChainMessage(funnel_id=fid, **body.model_dump(), updated_by=me.name)
+    node = await flow_node_of(db, fid, body.flow_node_id)
+    if node and node.type == "message":
+        raise HTTPException(400, "«Xabar» blokida bitta xabar bo'ladi — uni tahrirlang")
+    validate(body, node.type if node else None)
+    m = ChainMessage(funnel_id=fid, **{**body.model_dump(), "buttons": ensure_button_ids(body.buttons)},
+                     updated_by=me.name)
     db.add(m)
     await db.flush()
     db.add(ChainHistory(message_id=m.id, user_name=me.name, changes={"created": [None, body.title]}))
-    await replan_message(db, m)
+    await replan(db, m)
     await db.commit()
     return out(m)
 
@@ -138,8 +174,10 @@ async def update(mid: int, body: ChainIn, db: AsyncSession = Depends(get_db), me
     m = await db.get(ChainMessage, mid)
     if not m:
         raise HTTPException(404, "Xabar topilmadi")
-    validate(body)
-    new = body.model_dump()
+    node = await db.get(FlowNode, m.flow_node_id) if m.flow_node_id else None
+    validate(body, node.type if node else None)
+    new = body.model_dump(exclude={"flow_node_id"})
+    new["buttons"] = ensure_button_ids(new["buttons"])
     changes = {k: [getattr(m, k), v] for k, v in new.items() if getattr(m, k) != v}
     for k, v in new.items():
         setattr(m, k, v)
@@ -149,9 +187,17 @@ async def update(mid: int, body: ChainIn, db: AsyncSession = Depends(get_db), me
         db.add(ChainHistory(message_id=m.id, user_name=me.name, changes=changes))
     # matn o'zgarishi yuborish paytida o'qiladi; vaqt o'zgarsa — faqat yuborilmagan rejalar qayta hisoblanadi
     if TIMING & set(changes):
-        await replan_message(db, m)
+        await replan(db, m)
+    if node and node.type == "message" and "buttons" in changes:
+        await drop_stale_edges(db, node, m.buttons)
     await db.commit()
     return out(m)
+
+
+async def drop_stale_edges(db: AsyncSession, node: FlowNode, buttons: list) -> None:
+    """Xabardan tugma olib tashlansa — uning chizig'i ham o'chadi."""
+    from app.api.admin.flows import prune_edges  # aylana importdan qochish
+    await prune_edges(db, node, buttons)
 
 
 @router.delete("/chain/{mid}")
@@ -171,7 +217,11 @@ async def duplicate(mid: int, db: AsyncSession = Depends(get_db), me: AdminUser 
     m = await db.get(ChainMessage, mid)
     if not m:
         raise HTTPException(404, "Xabar topilmadi")
-    copy = ChainMessage(funnel_id=m.funnel_id, **{k: getattr(m, k) for k in EDITABLE}, updated_by=me.name)
+    node = await db.get(FlowNode, m.flow_node_id) if m.flow_node_id else None
+    if node and node.type == "message":
+        raise HTTPException(400, "«Xabar» blokini sxemada nusxalang")
+    copy = ChainMessage(funnel_id=m.funnel_id, **{k: getattr(m, k) for k in EDITABLE}, updated_by=me.name,
+                        flow_node_id=m.flow_node_id)
     copy.title = f"{m.title} (nusxa)"
     copy.status = "draft"
     db.add(copy)
@@ -217,7 +267,7 @@ TRIGGER_LABEL = {
     "after_registration": "ro'yxatdan {o} keyin", "before_day": "{d}-kundan {o} oldin",
     "at_day_start": "{d}-kun boshlanishida +{o}", "after_day_end": "{d}-kun tugagach +{o}",
     "before_deadline": "deadline tugashidan {o} oldin", "left_live": "{d}-kun efiridan chiqib ketgach {o}",
-    "on_button": "tugma bosilganda", "stuck": "to'xtab qolganda ({o})",
+    "on_button": "tugma bosilganda", "stuck": "to'xtab qolganda ({o})", "flow": "sxemada",
 }
 
 
@@ -243,6 +293,7 @@ async def simulate(fid: int, body: SimulateIn, db: AsyncSession = Depends(get_db
     if not reg or not day1 or day1 <= reg:
         raise HTTPException(400, "Ro'yxat vaqti 1-kundan oldin bo'lishi kerak")
     msgs = (await db.execute(select(ChainMessage).where(ChainMessage.funnel_id == fid,
+                                                        ChainMessage.flow_node_id.is_(None),
                                                         ChainMessage.status == "active")
                              .order_by(ChainMessage.sort, ChainMessage.id))).scalars().all()
     by_id = {m.id: m for m in msgs}

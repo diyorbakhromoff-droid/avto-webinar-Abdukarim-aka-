@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domain import slots
 from app.domain.planning import EVENT_TRIGGERS, ChainItem, SessionTimes, plan_chain
-from app.models import Attendance, ChainMessage, Funnel, Lead, LeadSession, ScheduledMessage
+from app.models import Attendance, ChainMessage, Funnel, Lead, LeadEvent, LeadSession, ScheduledMessage
 from app.services.leads import active_session, cancel_pending, event, quiet_of, set_step
 from app.timeutil import now_utc
 
@@ -27,7 +27,8 @@ def session_times(lead: Lead, s: LeadSession, f: Funnel) -> SessionTimes:
 
 async def active_chain(db: AsyncSession, funnel_id: int) -> list[ChainMessage]:
     return list((await db.execute(
-        select(ChainMessage).where(ChainMessage.funnel_id == funnel_id, ChainMessage.status == "active")
+        select(ChainMessage).where(ChainMessage.funnel_id == funnel_id, ChainMessage.status == "active",
+                                   ChainMessage.flow_node_id.is_(None))
         .order_by(ChainMessage.sort, ChainMessage.id)
     )).scalars().all())
 
@@ -231,7 +232,10 @@ async def make_cold(db: AsyncSession, lead: Lead, now: datetime) -> None:
 
 
 async def replan_message(db: AsyncSession, m: ChainMessage) -> None:
-    """Admin xabarni qo'shsa yoki vaqtini o'zgartirsa — kelajakdagi sessiyalar uchun qayta rejalashtirish."""
+    """Admin xabarni qo'shsa yoki vaqtini o'zgartirsa — kelajakdagi sessiyalar uchun qayta rejalashtirish.
+    Sxemadagi xabarlar bu yerda emas (flow_engine.replan_node)."""
+    if m.flow_node_id:
+        return
     f = await db.get(Funnel, m.funnel_id)
     now = now_utc()
     if m.status != "active":
@@ -290,7 +294,7 @@ async def detect_left_live(db: AsyncSession, now: datetime | None = None) -> int
         a.left_at = a.last_heartbeat_at
         event(db, lead, "left_live", day=a.day, minute=a.max_position_sec // 60)
         msgs = (await db.execute(select(ChainMessage).where(
-            ChainMessage.funnel_id == f.id, ChainMessage.status == "active",
+            ChainMessage.funnel_id == f.id, ChainMessage.status == "active", ChainMessage.flow_node_id.is_(None),
             ChainMessage.trigger_type == "left_live", ChainMessage.trigger_day == a.day))).scalars().all()
         stamp = int(a.left_at.timestamp())
         for m in msgs:
@@ -309,6 +313,7 @@ async def mark_returned(db: AsyncSession, a: Attendance) -> None:
     if a.left_at is None:
         return
     a.left_at = None
+    db.add(LeadEvent(lead_id=a.lead_id, type="returned", data={"day": a.day}))
     await db.execute(
         update(ScheduledMessage)
         .where(ScheduledMessage.status == "pending", ScheduledMessage.dedupe_key.like(f"left:%:{a.id}:%"))

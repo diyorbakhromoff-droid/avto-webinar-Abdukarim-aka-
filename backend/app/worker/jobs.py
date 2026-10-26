@@ -12,6 +12,7 @@ from app.db import SessionLocal
 from app.domain.segments import broadcast_allowed
 from app.models import Broadcast, ContactLog, Heartbeat, KeyValue, Lead, ScheduledMessage
 from app.services.leads import snapshot
+from app.services import flow_engine
 from app.services.payments import notify_manager
 from app.services.sessions import detect_left_live, evaluate_finished_days
 from app.timeutil import TZ, now_utc, to_local
@@ -32,6 +33,18 @@ async def left_live() -> None:
         n = await detect_left_live(db)
         if n:
             log.info("Efirdan chiqib ketganlar: %s", n)
+
+
+async def flow_events() -> None:
+    n = await flow_engine.process_events()
+    if n:
+        log.debug("Sxema: %s ta voqea", n)
+
+
+async def flow_tick() -> None:
+    n = await flow_engine.tick()
+    if n:
+        log.info("Sxema: %s ta lid keyingi blokka o'tdi", n)
 
 
 async def expand_broadcasts() -> None:

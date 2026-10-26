@@ -3,7 +3,7 @@ from datetime import date, datetime
 
 from sqlalchemy import (
     ARRAY, JSON, BigInteger, Boolean, Date, DateTime, Float, ForeignKey, Index, Integer, String, Text,
-    UniqueConstraint, func,
+    UniqueConstraint, false, func, text,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -151,6 +151,10 @@ class Lead(Base):
     manager_id: Mapped[int | None] = mapped_column(ForeignKey("admin_users.id", ondelete="SET NULL"), index=True)
     last_contact_at: Mapped[datetime | None] = ts()
 
+    # sxema: teglar va "savolingizni yozing" so'ralgan payt (shu vaqtgacha yozgan matn savol bo'ladi)
+    tags: Mapped[list[str]] = mapped_column(ARRAY(String(64)), default=list, server_default=text("'{}'"))
+    ask_until: Mapped[datetime | None] = ts()
+
     manager: Mapped[AdminUser | None] = relationship()
 
 
@@ -255,6 +259,8 @@ class ChainMessage(Base):
     status: Mapped[str] = mapped_column(String(10), default="active")
     sort: Mapped[int] = mapped_column(Integer, default=0)
     system_key: Mapped[str | None] = mapped_column(String(32))  # standart xabarlar (eslatma, qayta tanlash)
+    # sxemadagi "Xabar" yoki "Zanjir" blokiga tegishli bo'lsa — faqat lid shu blokka yetganda yuboriladi
+    flow_node_id: Mapped[int | None] = mapped_column(ForeignKey("flow_nodes.id", ondelete="CASCADE"), index=True)
     updated_at: Mapped[datetime] = ts(False, True)
     updated_by: Mapped[str | None] = mapped_column(String(100))
 
@@ -299,6 +305,8 @@ class ScheduledMessage(Base):
     chain_message_id: Mapped[int | None] = mapped_column(ForeignKey("chain_messages.id", ondelete="CASCADE"))
     broadcast_id: Mapped[int | None] = mapped_column(ForeignKey("broadcasts.id", ondelete="CASCADE"))
     session_id: Mapped[int | None] = mapped_column(ForeignKey("lead_sessions.id", ondelete="CASCADE"))
+    flow_run_id: Mapped[int | None] = mapped_column(ForeignKey("flow_runs.id", ondelete="SET NULL"), index=True)
+    flow_node_id: Mapped[int | None] = mapped_column(ForeignKey("flow_nodes.id", ondelete="CASCADE"))
     dedupe_key: Mapped[str] = mapped_column(String(64))
     session_bound: Mapped[bool] = mapped_column(Boolean, default=False)
     send_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
@@ -381,12 +389,14 @@ class LeadStep(Base):
 
 class LeadEvent(Base):
     __tablename__ = "lead_events"
+    __table_args__ = (Index("ix_events_flow_pending", "id", postgresql_where=text("NOT flow_done")),)
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     lead_id: Mapped[int] = mapped_column(ForeignKey("leads.id", ondelete="CASCADE"), index=True)
     type: Mapped[str] = mapped_column(String(32), index=True)
     data: Mapped[dict] = mapped_column(JSON, default=dict)
     at: Mapped[datetime] = ts(False, True)
+    flow_done: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())  # sxema ko'rib chiqdi
 
 
 class ContactLog(Base):
@@ -428,3 +438,96 @@ class AuditLog(Base):
     action: Mapped[str] = mapped_column(String(64))
     details: Mapped[str] = mapped_column(Text, default="")
     at: Mapped[datetime] = ts(False, True)
+
+
+# ─────────────────────────── progrev sxemasi ───────────────────────────
+
+class Flow(Base):
+    """Sxemaning bo'limi (alohida varaq): bloklar va ularni ulovchi chiziqlar."""
+    __tablename__ = "flows"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    funnel_id: Mapped[int] = mapped_column(ForeignKey("funnels.id", ondelete="CASCADE"), index=True)
+    name: Mapped[str] = mapped_column(String(100))
+    status: Mapped[str] = mapped_column(String(10), default="draft")  # active | draft
+    sort: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = ts(False, True)
+    updated_at: Mapped[datetime] = ts(False, True)
+    updated_by: Mapped[str | None] = mapped_column(String(100))
+
+
+class FlowNode(Base):
+    """Blok: start | message | wait | condition | action | goto | chain | stop | note.
+    Xabar matni va tugmalari chain_messages da (flow_node_id), qolgan sozlamalar config da."""
+    __tablename__ = "flow_nodes"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    flow_id: Mapped[int] = mapped_column(ForeignKey("flows.id", ondelete="CASCADE"), index=True)
+    type: Mapped[str] = mapped_column(String(12))
+    title: Mapped[str] = mapped_column(String(200), default="")
+    x: Mapped[int] = mapped_column(Integer, default=0)
+    y: Mapped[int] = mapped_column(Integer, default=0)
+    config: Mapped[dict] = mapped_column(JSON, default=dict)
+    updated_at: Mapped[datetime] = ts(False, True)
+
+
+class FlowEdge(Base):
+    """Chiziq: blokning chiqishidan (port) boshqa blokka. Zanjirga ulansa — to_item-xabaridan boshlanadi."""
+    __tablename__ = "flow_edges"
+    __table_args__ = (UniqueConstraint("from_node_id", "from_port"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    flow_id: Mapped[int] = mapped_column(ForeignKey("flows.id", ondelete="CASCADE"), index=True)
+    from_node_id: Mapped[int] = mapped_column(ForeignKey("flow_nodes.id", ondelete="CASCADE"))
+    from_port: Mapped[str] = mapped_column(String(24))
+    to_node_id: Mapped[int] = mapped_column(ForeignKey("flow_nodes.id", ondelete="CASCADE"), index=True)
+    to_item: Mapped[int] = mapped_column(Integer, default=0)
+
+
+class FlowRun(Base):
+    """Lidning bo'limdagi joyi. Bir lid bir bo'limda bir vaqtda faqat bitta joyda bo'ladi."""
+    __tablename__ = "flow_runs"
+    __table_args__ = (Index("ix_flow_runs_due", "status", "wait_until"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    lead_id: Mapped[int] = mapped_column(ForeignKey("leads.id", ondelete="CASCADE"), index=True)
+    flow_id: Mapped[int] = mapped_column(ForeignKey("flows.id", ondelete="CASCADE"), index=True)
+    node_id: Mapped[int | None] = mapped_column(ForeignKey("flow_nodes.id", ondelete="SET NULL"))
+    status: Mapped[str] = mapped_column(String(10), default="active")  # active | waiting | done | stopped
+    waiting_for: Mapped[str | None] = mapped_column(String(10))       # button | time | event | chain
+    wait_event: Mapped[str | None] = mapped_column(String(24))
+    wait_until: Mapped[datetime | None] = ts()
+    session_id: Mapped[int | None] = mapped_column(ForeignKey("lead_sessions.id", ondelete="SET NULL"))
+    ctx: Mapped[dict] = mapped_column(JSON, default=dict)
+    started_at: Mapped[datetime] = ts(False, True)
+    updated_at: Mapped[datetime] = ts(False, True)
+    ended_reason: Mapped[str | None] = mapped_column(String(200))
+
+
+class FlowVisit(Base):
+    """Lid blokka kirdi va qaysi chiqishdan chiqdi — blok ustidagi raqamlar shundan."""
+    __tablename__ = "flow_visits"
+    __table_args__ = (Index("ix_flow_visits_node_at", "node_id", "entered_at"),)
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    run_id: Mapped[int] = mapped_column(ForeignKey("flow_runs.id", ondelete="CASCADE"), index=True)
+    lead_id: Mapped[int] = mapped_column(ForeignKey("leads.id", ondelete="CASCADE"))
+    node_id: Mapped[int] = mapped_column(ForeignKey("flow_nodes.id", ondelete="CASCADE"))
+    port: Mapped[str | None] = mapped_column(String(24))
+    entered_at: Mapped[datetime] = ts(False, True)
+    left_at: Mapped[datetime | None] = ts()
+
+
+class FlowChainEntry(Base):
+    """Lid zanjirga kirdi (start_index-xabardan). Efir vaqti o'zgarsa, shu yozuv bo'yicha qayta rejalashtiriladi."""
+    __tablename__ = "flow_chain_entries"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    run_id: Mapped[int] = mapped_column(ForeignKey("flow_runs.id", ondelete="CASCADE"), index=True)
+    lead_id: Mapped[int] = mapped_column(ForeignKey("leads.id", ondelete="CASCADE"), index=True)
+    node_id: Mapped[int] = mapped_column(ForeignKey("flow_nodes.id", ondelete="CASCADE"))
+    start_index: Mapped[int] = mapped_column(Integer, default=0)
+    entered_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    session_id: Mapped[int | None] = mapped_column(ForeignKey("lead_sessions.id", ondelete="SET NULL"))
+    key_suffix: Mapped[str] = mapped_column(String(16), default="")  # shu sessiyada qayta kirilsa — qayta yuboriladi
+    active: Mapped[bool] = mapped_column(Boolean, default=True)

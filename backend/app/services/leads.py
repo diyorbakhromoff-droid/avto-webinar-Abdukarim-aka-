@@ -45,6 +45,7 @@ EVENT_TITLES = {
     "rescheduled": "Qayta vaqt tanladi",
     "joined": "Efirga kirdi",
     "left_live": "Efirdan chiqib ketdi",
+    "returned": "Efirga qaytdi",
     "day_result": "Kun yakuni",
     "reached_offer": "Oferta momentiga yetdi",
     "clicked_buy": "«Kursga yozilish» tugmasini bosdi",
@@ -61,6 +62,7 @@ EVENT_TITLES = {
     "invite_sent": "Kanal havolasi yuborildi",
     "cold": "Sovuq segmentga o'tdi",
     "manager_assigned": "Menejer biriktirildi",
+    "flow_action": "Sxema amali",
 }
 
 
@@ -133,6 +135,7 @@ async def plan_stuck_messages(db: AsyncSession, lead: Lead, stuck_step: str, ent
     funnel = await db.get(Funnel, lead.funnel_id)
     msgs = (await db.execute(
         select(ChainMessage).where(ChainMessage.funnel_id == lead.funnel_id, ChainMessage.status == "active",
+                                   ChainMessage.flow_node_id.is_(None),
                                    ChainMessage.trigger_type == "stuck", ChainMessage.stuck_step == stuck_step)
     )).scalars().all()
     quiet = quiet_of(funnel)

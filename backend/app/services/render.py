@@ -50,7 +50,8 @@ def fill(text: str, vars: dict[str, str]) -> str:
 
 
 def keyboard(buttons: list[list[dict]], track: str | None = None) -> InlineKeyboardMarkup | None:
-    """Tugmalar: url | webapp | reschedule | pay. track — bosishni hisoblash uchun belgi."""
+    """Tugmalar: url | webapp | reschedule | pay | next. track — bosishni hisoblash uchun belgi.
+    next — sxemada keyingi blokka o'tkazadi (tugmaning o'z chizig'i bo'ylab)."""
     if not buttons:
         return None
     s = get_settings()
@@ -71,6 +72,8 @@ def keyboard(buttons: list[list[dict]], track: str | None = None) -> InlineKeybo
                 out.append(InlineKeyboardButton(text=text, callback_data=f"resched:{track or ''}"))
             elif t == "pay":
                 out.append(InlineKeyboardButton(text=text, callback_data=f"buy:{track or ''}"))
+            elif t == "next":
+                out.append(InlineKeyboardButton(text=text, callback_data=f"fl:{track}:{r}:{c}" if track else "fl:test"))
         if out:
             rows.append(out)
     return InlineKeyboardMarkup(inline_keyboard=rows) if rows else None

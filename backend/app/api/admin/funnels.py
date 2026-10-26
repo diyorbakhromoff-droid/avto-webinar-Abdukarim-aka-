@@ -12,6 +12,7 @@ from pydantic import BaseModel
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.admin.flows import copy_flows
 from app.api.common import audit, funnel_or_404
 from app.bot import texts
 from app.config import get_settings
@@ -88,12 +89,14 @@ async def copy_funnel(fid: int, body: FunnelIn, db: AsyncSession = Depends(get_d
         db.add(Tariff(funnel_id=f.id, name=t.name, description=t.description, special_price=t.special_price,
                       regular_price=t.regular_price, deposit_enabled=t.deposit_enabled,
                       deposit_amount=t.deposit_amount, sort=t.sort))
-    for m in (await db.execute(select(ChainMessage).where(ChainMessage.funnel_id == src.id))).scalars():
+    for m in (await db.execute(select(ChainMessage).where(ChainMessage.funnel_id == src.id,
+                                                          ChainMessage.flow_node_id.is_(None)))).scalars():
         db.add(ChainMessage(funnel_id=f.id, **{c: getattr(m, c) for c in (
             "title", "kind", "text", "media_ids", "buttons", "trigger_type", "trigger_day", "offset_minutes",
             "stuck_step", "button_key", "segment", "segment_day", "segment_minute", "required", "status", "sort",
             "system_key")},
             updated_by=me.name))
+    await copy_flows(db, src.id, f.id, me.name)
     for c in (await db.execute(select(LiveComment).where(LiveComment.funnel_id == src.id))).scalars():
         db.add(LiveComment(funnel_id=f.id, day=c.day, t=c.t, author=c.author, text=c.text))
     audit(db, me.name, "funnel_copied", f"{src.slug} -> {body.slug}")

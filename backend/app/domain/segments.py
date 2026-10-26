@@ -109,6 +109,19 @@ def chain_allowed(segment: str, s: LeadSnapshot, day: int | None = None,
     return True, None
 
 
+def flow_allowed(s: LeadSnapshot, paid_ok: bool = False) -> tuple[bool, str | None]:
+    """Sxemadagi "Xabar" bloki. Kimga yuborilishini sxemaning o'zi (shart bloklari) hal qiladi."""
+    if s.blocked:
+        return False, "botni bloklagan"
+    if s.unsubscribed:
+        return False, "xabarlarni to'xtatgan"
+    if s.cold:
+        return False, "sovuq lid — faqat ommaviy xabarlar"
+    if s.payment_status != "none" and not paid_ok:
+        return False, "to'lagan"
+    return True, None
+
+
 def broadcast_allowed(segment: str, s: LeadSnapshot) -> bool:
     if s.blocked or s.unsubscribed:
         return False

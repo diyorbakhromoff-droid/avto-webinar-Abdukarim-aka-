@@ -11,11 +11,14 @@ from aiogram.exceptions import (
 from sqlalchemy import select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.bot import flows as bot_flows
+from app.bot import texts
 from app.db import SessionLocal
-from app.domain.segments import broadcast_allowed, chain_allowed
+from app.domain.segments import broadcast_allowed, chain_allowed, flow_allowed
 from app.models import (
-    Attendance, Broadcast, ChainMessage, Funnel, Lead, LeadSession, Media, ScheduledMessage,
+    Attendance, Broadcast, ChainMessage, FlowNode, Funnel, Lead, LeadSession, Media, ScheduledMessage,
 )
+from app.services import flow_engine
 from app.services.leads import cancel_pending, event, snapshot
 from app.services.render import Payload, fill, keyboard, send_payload, variables
 from app.timeutil import now_utc
@@ -25,6 +28,7 @@ log = logging.getLogger(__name__)
 DAY1_SEGMENTS = {"day1_attended", "day1_missed"}
 DAY2_SEGMENTS = {"day2_attended", "day2_missed", "reached_offer", "left_before_offer"}
 MAX_ATTEMPTS = 3
+ASK_WINDOW = timedelta(hours=24)   # "savolingizni yozing" dan keyin shuncha vaqt yozilgan matn — savol
 
 
 class RateLimiter:
@@ -103,10 +107,43 @@ async def send_one(bot: Bot, limiter: RateLimiter, sid: int) -> None:
                 .order_by(LeadSession.id.desc()).limit(1))).scalar_one_or_none()
         snap = await snapshot(db, lead, session)
 
+        if sm.flow_node_id and not sm.chain_message_id:
+            # sxemadagi amal: yangi vaqt tanlash yoki savol so'rash
+            node = await db.get(FlowNode, sm.flow_node_id)
+            action = (node.config or {}).get("action") if node and node.type == "action" else None
+            if action not in ("reschedule", "ask"):
+                await _finish(db, sm, "skipped", "amal topilmadi")
+                return
+            if snap.unsubscribed:
+                await _finish(db, sm, "skipped", "xabarlarni to'xtatgan")
+                return
+
+            async def deliver():
+                if action == "reschedule":
+                    await bot_flows.send_reschedule(bot, db, lead, await db.get(Funnel, lead.funnel_id))
+                else:
+                    await bot.send_message(lead.tg_user_id, texts.ASK_QUESTION)
+                    lead.ask_until = now_utc() + ASK_WINDOW
+            await _deliver(bot, limiter, db, sm, lead, deliver)
+            return
+
         if sm.chain_message_id:
             msg = await db.get(ChainMessage, sm.chain_message_id)
             if not msg or msg.status != "active":
                 await _finish(db, sm, "skipped", "xabar faol emas")
+                return
+            node = await db.get(FlowNode, msg.flow_node_id) if msg.flow_node_id else None
+            if node is not None and node.type == "message":
+                # sxemadagi xabar: kimga borishini sxema hal qilgan; faqat umumiy cheklovlar
+                ok, why = flow_allowed(snap, bool((node.config or {}).get("paid_ok")))
+                if not ok:
+                    await _finish(db, sm, "skipped", why)
+                    await flow_engine.on_message_skipped(db, sm, why)
+                    await db.commit()
+                    return
+                payload = Payload(msg.kind, msg.text, await _media(db, msg.media_ids), msg.buttons or [],
+                                  msg.trigger_day)
+                await _send_payload(bot, limiter, db, sm, lead, session, payload)
                 return
             if session and _results_pending(msg.segment, session, await db.get(Funnel, lead.funnel_id)):
                 await _postpone(db, sm, 30, "kun natijasi kutilmoqda")
@@ -135,33 +172,44 @@ async def send_one(bot: Bot, limiter: RateLimiter, sid: int) -> None:
         else:
             await _finish(db, sm, "skipped", "bo'sh")
             return
+        await _send_payload(bot, limiter, db, sm, lead, session, payload)
 
-        body = fill(payload.text, variables(lead, session, payload.trigger_day))
-        markup = keyboard(payload.buttons, track=str(sm.id))
-        await limiter.wait()
-        try:
-            await send_payload(bot, db, lead.tg_user_id, payload, body, markup)
-        except TelegramRetryAfter as e:
-            await limiter.pause(e.retry_after)
-            await _postpone(db, sm, int(e.retry_after) + 1, "429: retry_after")
-            return
-        except TelegramForbiddenError:
-            lead.blocked = True
-            event(db, lead, "blocked", chain_message_id=sm.chain_message_id)
-            await cancel_pending(db, lead.id, "botni bloklagan", chain_only=False)
-            await _finish(db, sm, "failed", "403: botni bloklagan")
-            return
-        except TelegramBadRequest as e:
-            await _finish(db, sm, "failed", f"400: {e.message}")
-            return
-        except (TelegramAPIError, OSError) as e:
-            sm.attempts += 1
-            if sm.attempts >= MAX_ATTEMPTS:
-                await _finish(db, sm, "failed", str(e))
-            else:
-                await _postpone(db, sm, 60, f"qayta urinish: {e}")
-            return
-        await _finish(db, sm, "sent")
+
+async def _send_payload(bot: Bot, limiter: RateLimiter, db: AsyncSession, sm: ScheduledMessage, lead: Lead,
+                        session: LeadSession | None, payload: Payload) -> None:
+    body = fill(payload.text, variables(lead, session, payload.trigger_day))
+    markup = keyboard(payload.buttons, track=str(sm.id))
+    await _deliver(bot, limiter, db, sm, lead,
+                   lambda: send_payload(bot, db, lead.tg_user_id, payload, body, markup))
+
+
+async def _deliver(bot: Bot, limiter: RateLimiter, db: AsyncSession, sm: ScheduledMessage, lead: Lead,
+                   send) -> None:
+    """Telegram'ga yuborish va xatolarni ishlash (429 — kutish, 403 — bloklagan, qolgani — qayta urinish)."""
+    await limiter.wait()
+    try:
+        await send()
+    except TelegramRetryAfter as e:
+        await limiter.pause(e.retry_after)
+        await _postpone(db, sm, int(e.retry_after) + 1, "429: retry_after")
+        return
+    except TelegramForbiddenError:
+        lead.blocked = True
+        event(db, lead, "blocked", chain_message_id=sm.chain_message_id)
+        await cancel_pending(db, lead.id, "botni bloklagan", chain_only=False)
+        await _finish(db, sm, "failed", "403: botni bloklagan")
+        return
+    except TelegramBadRequest as e:
+        await _finish(db, sm, "failed", f"400: {e.message}")
+        return
+    except (TelegramAPIError, OSError) as e:
+        sm.attempts += 1
+        if sm.attempts >= MAX_ATTEMPTS:
+            await _finish(db, sm, "failed", str(e))
+        else:
+            await _postpone(db, sm, 60, f"qayta urinish: {e}")
+        return
+    await _finish(db, sm, "sent")
 
 
 def _results_pending(segment: str, s: LeadSession, f: Funnel) -> bool:

@@ -14,8 +14,8 @@ from app.api.common import audit, funnel_or_404, iso, parse_iso
 from app.bot import texts
 from app.db import get_db
 from app.models import (
-    AdminUser, Attendance, Broadcast, ChainMessage, ContactLog, Funnel, Lead, LeadEvent, LeadSession, Payment,
-    ScheduledMessage, Tariff,
+    AdminUser, Attendance, Broadcast, ChainMessage, ContactLog, Flow, FlowNode, FlowRun, Funnel, Lead, LeadEvent,
+    LeadSession, Payment, ScheduledMessage, Tariff,
 )
 from app.security.auth import SALES
 from app.services import payments as pay
@@ -254,6 +254,10 @@ async def lead_card(lid: int, db: AsyncSession = Depends(get_db), _=Depends(SALE
         .order_by(ScheduledMessage.send_at.desc()).limit(200))).all()
     status_uz = {"sent": "yuborildi", "pending": "rejalashtirilgan", "skipped": "o'tkazib yuborildi",
                  "failed": "xato", "sending": "yuborilmoqda"}
+    runs = (await db.execute(
+        select(FlowRun, Flow.name, FlowNode.title, FlowNode.type).join(Flow, Flow.id == FlowRun.flow_id)
+        .outerjoin(FlowNode, FlowNode.id == FlowRun.node_id).where(FlowRun.lead_id == lid)
+        .order_by(FlowRun.id.desc()).limit(20))).all()
     card.update(
         registered_at=iso(lead.created_at),
         sessions=[{"id": s.id, "day1_at": iso(s.day1_at), "day2_at": iso(s.day2_at), "status": s.status}
@@ -263,6 +267,11 @@ async def lead_card(lid: int, db: AsyncSession = Depends(get_db), _=Depends(SALE
         payments=[payment_out(p, lead, t) for p, t in pays],
         contacts=[{"at": iso(c.at), "manager": c.manager_name, "result": c.result, "callback_at": iso(c.callback_at),
                    "note": c.note} for c in contacts],
+        tags=lead.tags or [],
+        flow_runs=[{"id": r.id, "flow_id": r.flow_id, "flow_name": fname, "node_title": ntitle, "node_type": ntype,
+                    "status": r.status, "waiting_for": r.waiting_for, "wait_until": iso(r.wait_until),
+                    "started_at": iso(r.started_at), "updated_at": iso(r.updated_at), "reason": r.ended_reason}
+                   for r, fname, ntitle, ntype in runs],
         events=[{"at": iso(e.at), "type": e.type, "title": EVENT_TITLES.get(e.type, e.type),
                  "details": event_details(e)} for e in events],
         messages=[{"at": iso(sm.sent_at or sm.send_at), "title": title or (f"Ommaviy xabar #{bid}" if bid else "—"),

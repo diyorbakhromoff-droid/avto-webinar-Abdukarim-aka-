@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot import flows, texts
 from app.models import ChainMessage, Funnel, Lead, LeadStep, Media, Question, ScheduledMessage, Tariff
-from app.services import payments
+from app.services import flow_engine, payments
 from app.services.leads import cancel_pending, event, lead_for_tg, plan_stuck_messages, set_step
 from app.services.render import Payload, fill, send_payload, variables
 from app.services.sessions import SessionError, choose_day1, choose_day2
@@ -250,6 +250,17 @@ async def track_click(db: AsyncSession, lead: Lead, track: str) -> ChainMessage 
     return await db.get(ChainMessage, sm.chain_message_id)
 
 
+@router.callback_query(F.data.startswith("fl:"))
+async def flow_button(call: CallbackQuery, db: AsyncSession):
+    """Sxemadagi xabar tugmasi: lid shu tugmaning chizig'i bo'ylab keyingi blokka o'tadi."""
+    parts = call.data.split(":")
+    result = "invalid"
+    if len(parts) == 4 and all(p.isdigit() for p in parts[1:]):
+        result = await flow_engine.on_button(db, call.from_user.id, int(parts[1]), int(parts[2]), int(parts[3]))
+        await db.commit()
+    await call.answer(texts.FLOW_BUTTON_OLD if result in ("old", "inactive") else None)
+
+
 @router.callback_query(F.data.startswith("resched:"))
 async def resched(call: CallbackQuery, db: AsyncSession, bot: Bot):
     lead, funnel = await current_lead(db, call.from_user.id)
@@ -399,6 +410,14 @@ async def any_text(message: Message, db: AsyncSession, bot: Bot):
             await message.answer(texts.BAD_PHONE, reply_markup=flows.phone_keyboard())
             return
         await save_phone(message, db, bot, lead, funnel, phone)
+        return
+    if lead.ask_until and lead.ask_until > now_utc():
+        # sxema "savolingizni yozing" deb so'ragan edi
+        lead.ask_until = None
+        db.add(Question(lead_id=lead.id, text=message.text[:4000], source="bot"))
+        event(db, lead, "question")
+        await db.commit()
+        await message.answer(texts.QUESTION_OK)
         return
     await flows.send_my_session(bot, db, lead, funnel)
 
