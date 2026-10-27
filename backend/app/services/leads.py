@@ -5,10 +5,11 @@ from sqlalchemy import select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.domain.pipeline import STAGES
 from app.domain.planning import ChainItem, QuietHours, plan_stuck
 from app.domain.segments import DayWatch, LeadSnapshot
 from app.models import (
-    Attendance, ChainMessage, Funnel, Lead, LeadEvent, LeadSession, LeadStep, Payment, ScheduledMessage,
+    Attendance, ChainMessage, ContactLog, Funnel, Lead, LeadEvent, LeadSession, LeadStep, Payment, ScheduledMessage,
 )
 from app.timeutil import now_utc, parse_hhmm
 
@@ -63,6 +64,7 @@ EVENT_TITLES = {
     "cold": "Sovuq segmentga o'tdi",
     "manager_assigned": "Menejer biriktirildi",
     "flow_action": "Sxema amali",
+    "stage": "Sotuv bosqichi",
 }
 
 
@@ -129,6 +131,19 @@ async def set_step(db: AsyncSession, lead: Lead, step: str, at: datetime | None 
     new_stuck = STEP_TO_STUCK.get(step)
     if new_stuck:
         await plan_stuck_messages(db, lead, new_stuck, at)
+
+
+async def set_stage(db: AsyncSession, lead: Lead, stage: str, by: str) -> None:
+    """Sotuv doskasidagi bosqich. Qayta qo'ng'iroqdan chiqqan lid uchun eslatma endi kelmaydi."""
+    if lead.stage == stage:
+        return
+    if lead.stage == "callback":
+        await db.execute(update(ContactLog).where(
+            ContactLog.lead_id == lead.id, ContactLog.result == "callback", ContactLog.reminded.is_(False))
+            .values(reminded=True))
+    event(db, lead, "stage", old=lead.stage, stage=stage, by=by)
+    lead.stage = stage
+    lead.stage_at = now_utc()
 
 
 async def plan_stuck_messages(db: AsyncSession, lead: Lead, stuck_step: str, entered_at: datetime) -> None:

@@ -7,19 +7,20 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Upload
 from fastapi.responses import StreamingResponse
 from openpyxl import Workbook
 from pydantic import BaseModel
-from sqlalchemy import Select, and_, func, or_, select
+from sqlalchemy import Select, and_, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.common import audit, funnel_or_404, iso, parse_iso
 from app.bot import texts
 from app.db import get_db
+from app.domain.pipeline import STAGES, DayInfo, PathInput, funnel_path, stage_after_contact
 from app.models import (
     AdminUser, Attendance, Broadcast, ChainMessage, ContactLog, Flow, FlowNode, FlowRun, Funnel, Lead, LeadEvent,
     LeadSession, Payment, ScheduledMessage, Tariff,
 )
 from app.security.auth import SALES
 from app.services import payments as pay
-from app.services.leads import EVENT_TITLES, STEP_LABELS, active_session, event
+from app.services.leads import EVENT_TITLES, STEP_LABELS, active_session, event, set_stage
 from app.services.sessions import plan_for_session
 from app.services.tg import get_bot
 from app.timeutil import fmt_datetime, local_to_utc, now_utc
@@ -108,7 +109,7 @@ def row_out(lead: Lead, mgr: AdminUser | None, receipt: str | None) -> dict:
         "manager": {"id": mgr.id, "name": mgr.name} if mgr else None,
         "step": lead.step, "step_label": STEP_LABELS.get(lead.step, lead.step), "step_since": iso(lead.step_at),
         "last_contact_at": iso(lead.last_contact_at), "blocked": lead.blocked, "unsubscribed": lead.unsubscribed,
-        "created_at": iso(lead.created_at),
+        "created_at": iso(lead.created_at), "stage": lead.stage, "stage_label": STAGES.get(lead.stage, lead.stage),
     }
 
 
@@ -154,13 +155,13 @@ async def export(flt: Filters = Depends(), db: AsyncSession = Depends(get_db), m
     ws = wb.active
     ws.title = "Lidlar"
     ws.append(["Ism", "Telefon", "Username", "Manba", "Ro'yxat", "1-kun (daq)", "2-kun (daq)", "Oferta",
-               "Tugma", "Chek", "To'lov", "Menejer", "Oxirgi qadam", "Qadam vaqti"])
+               "Tugma", "Chek", "To'lov", "Menejer", "Bosqich", "Oxirgi qadam", "Qadam vaqti"])
     for lead, mgr, receipt in rows:
         r = row_out(lead, mgr, receipt)
         ws.append([r["name"], r["phone"], r["username"], r["source"], fmt_datetime(lead.created_at),
                    r["day1_minutes"], r["day2_minutes"], "ha" if r["reached_offer"] else "yo'q",
                    "ha" if r["clicked_buy"] else "yo'q", r["receipt"], r["payment_status"],
-                   mgr.name if mgr else "", r["step_label"], fmt_datetime(lead.step_at)])
+                   mgr.name if mgr else "", r["stage_label"], r["step_label"], fmt_datetime(lead.step_at)])
     audit(db, me.name, "leads_exported", f"{len(rows)} ta lid")
     await db.commit()
     buf = io.BytesIO()
@@ -168,6 +169,74 @@ async def export(flt: Filters = Depends(), db: AsyncSession = Depends(get_db), m
     buf.seek(0)
     return StreamingResponse(buf, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                              headers={"Content-Disposition": 'attachment; filename="lidlar.xlsx"'})
+
+
+# ── sotuv doskasi ──
+
+PIPELINE_PAGE = 30
+
+
+def paid_sum():
+    return (select(func.coalesce(func.sum(Payment.amount), 0)).where(
+        Payment.lead_id == Lead.id, Payment.status == "approved", Payment.refunded.is_(False)).scalar_subquery())
+
+
+def next_call():
+    return (select(ContactLog.callback_at).where(ContactLog.lead_id == Lead.id, ContactLog.result == "callback")
+            .order_by(ContactLog.id.desc()).limit(1).scalar_subquery())
+
+
+def last_note():
+    return (select(ContactLog.note).where(ContactLog.lead_id == Lead.id, ContactLog.note != "")
+            .order_by(ContactLog.id.desc()).limit(1).scalar_subquery())
+
+
+def card_out(lead: Lead, mgr: AdminUser | None, receipt: str | None, paid: int | None, call_at: datetime | None,
+             note: str | None) -> dict:
+    r = row_out(lead, mgr, receipt)
+    return {k: r[k] for k in ("id", "name", "phone", "username", "stage", "step", "step_label", "step_since",
+                              "manager", "payment_status", "receipt", "day1_minutes", "day2_minutes", "blocked",
+                              "unsubscribed", "created_at")} | {
+        "stage_at": iso(lead.stage_at), "paid": paid or 0, "note": note or "",
+        "callback_at": iso(call_at) if lead.stage == "callback" else None,
+    }
+
+
+def stage_order(stage: str, call_at):
+    if stage == "callback":
+        return call_at.asc().nulls_last(), Lead.id
+    if stage == "new":  # avtovoronkada yaqinda harakat qilganlar tepada
+        return Lead.step_at.desc(), Lead.id.desc()
+    return Lead.stage_at.desc(), Lead.id.desc()
+
+
+@router.get("/pipeline")
+async def pipeline(flt: Filters = Depends(), stage: str | None = None, offset: int = 0,
+                   db: AsyncSession = Depends(get_db), _=Depends(SALES)):
+    """Bosqichlar bo'yicha ustunlar. stage berilsa — faqat shu ustunning keyingi kartalari."""
+    f = await funnel_or_404(db, flt.funnel_id)
+    if stage is not None and stage not in STAGES:
+        raise HTTPException(400, "Noma'lum bosqich")
+    base = flt.stmt(f)
+    paid, call_at, note = paid_sum(), next_call(), last_note()
+    cards = base.add_columns(paid, call_at, note)
+
+    async def items(st: str, off: int) -> list[dict]:
+        rows = (await db.execute(cards.where(Lead.stage == st).order_by(*stage_order(st, call_at))
+                                 .offset(off).limit(PIPELINE_PAGE))).all()
+        return [card_out(*r) for r in rows]
+
+    if stage:
+        return {"items": await items(stage, max(offset, 0))}
+    sq = base.add_columns(paid.label("paid")).subquery()
+    agg = {k: (n, total) for k, n, total in (await db.execute(
+        select(sq.c.stage, func.count(), func.coalesce(func.sum(sq.c.paid), 0)).group_by(sq.c.stage))).all()}
+    out = []
+    for key, label in STAGES.items():
+        n, total = agg.get(key, (0, 0))
+        out.append({"key": key, "label": label, "count": n, "sum": int(total),
+                    "items": await items(key, 0) if n else []})
+    return {"stages": out}
 
 
 def payment_out(p: Payment, lead: Lead, tariff: Tariff | None) -> dict:
@@ -213,6 +282,9 @@ def event_details(e: LeadEvent) -> str:
             return f"{d.get('day')}-kun, {d.get('minute', 0)}-daqiqada"
         case "clicked_buy":
             return "Mini App" if d.get("source") == "miniapp" else "bot"
+        case "stage":
+            return (f"{STAGES.get(d.get('old'), d.get('old'))} → {STAGES.get(d.get('stage'), d.get('stage'))}"
+                    + (f" ({d['by']})" if d.get("by") else ""))
     return ""
 
 
@@ -230,11 +302,16 @@ async def lead_card(lid: int, db: AsyncSession = Depends(get_db), _=Depends(SALE
                                  .order_by(LeadSession.id))).scalars().all()
     active = next((s for s in reversed(sessions) if s.status != "replaced"), None)
     watch = []
+    days: dict[int, DayInfo] = {}
     if active:
         for day, day_at, dur in ((1, active.day1_at, f.day1_duration_sec), (2, active.day2_at, f.day2_duration_sec)):
             a = (await db.execute(select(Attendance).where(Attendance.session_id == active.id,
                                                            Attendance.day == day, Attendance.day_at == day_at)
                                   )).scalar_one_or_none()
+            days[day] = DayInfo(
+                at=day_at, evaluated=active.day1_evaluated if day == 1 else active.day2_evaluated,
+                watched_min=a.watched_sec // 60 if a else None, duration_min=dur // 60,
+                ok=active.day1_watched if day == 1 else None, joined_at=a.joined_at if a else None)
             if a:
                 watch.append({"day": day, "minutes": a.watched_sec // 60, "duration_min": dur // 60,
                               "percent": round(a.watched_sec * 100 / dur) if dur else 0,
@@ -242,6 +319,13 @@ async def lead_card(lid: int, db: AsyncSession = Depends(get_db), _=Depends(SALE
                               "offer_min": f.day2_offer_sec // 60 if day == 2 else None})
     pays = (await db.execute(select(Payment, Tariff).outerjoin(Tariff, Tariff.id == Payment.tariff_id)
                              .where(Payment.lead_id == lid).order_by(Payment.id.desc()))).all()
+    approved = [p for p, _ in pays if p.status == "approved"]
+    path = funnel_path(PathInput(
+        registered_at=lead.created_at, source=lead.source, phone_at=lead.phone_at,
+        session_at=sessions[0].created_at if sessions else None, day1=days.get(1), day2=days.get(2),
+        reached_offer_at=lead.reached_offer_at, clicked_buy_at=lead.clicked_buy_at,
+        receipt_at=pays[-1][0].submitted_at if pays else None, receipt_status=pays[0][0].status if pays else None,
+        paid_at=approved[-1].decided_at if approved else None, payment_status=lead.payment_status, now=now_utc()))
     contacts = (await db.execute(select(ContactLog).where(ContactLog.lead_id == lid)
                                  .order_by(ContactLog.id.desc()))).scalars()
     events = (await db.execute(select(LeadEvent).where(LeadEvent.lead_id == lid)
@@ -267,7 +351,8 @@ async def lead_card(lid: int, db: AsyncSession = Depends(get_db), _=Depends(SALE
         payments=[payment_out(p, lead, t) for p, t in pays],
         contacts=[{"at": iso(c.at), "manager": c.manager_name, "result": c.result, "callback_at": iso(c.callback_at),
                    "note": c.note} for c in contacts],
-        tags=lead.tags or [],
+        tags=lead.tags or [], stage_at=iso(lead.stage_at),
+        path=[{"key": p.key, "label": p.label, "state": p.state, "at": iso(p.at), "detail": p.detail} for p in path],
         flow_runs=[{"id": r.id, "flow_id": r.flow_id, "flow_name": fname, "node_title": ntitle, "node_type": ntype,
                     "status": r.status, "waiting_for": r.waiting_for, "wait_until": iso(r.wait_until),
                     "started_at": iso(r.started_at), "updated_at": iso(r.updated_at), "reason": r.ended_reason}
@@ -297,6 +382,18 @@ class ContactIn(BaseModel):
 RESULT_UZ = {"no_answer": "javob bermadi", "callback": "qayta qo'ng'iroq", "sold": "sotildi", "refused": "rad etdi"}
 
 
+async def log_contact(db: AsyncSession, lead: Lead, me: AdminUser, result: str, cb: datetime | None,
+                      note: str) -> None:
+    if result == "callback":  # yangi vaqt eskisining o'rnini bosadi — ikki marta eslatilmaydi
+        await db.execute(update(ContactLog).where(
+            ContactLog.lead_id == lead.id, ContactLog.result == "callback", ContactLog.reminded.is_(False))
+            .values(reminded=True))
+    db.add(ContactLog(lead_id=lead.id, manager_name=me.name, result=result, callback_at=cb, note=note))
+    lead.last_contact_at = now_utc()
+    summary = RESULT_UZ[result] + (f" ({fmt_datetime(cb)})" if cb else "") + (f": {note}" if note else "")
+    event(db, lead, "contact", summary=f"{me.name} — {summary}")
+
+
 @router.post("/leads/{lid}/contact")
 async def contact(lid: int, body: ContactIn, db: AsyncSession = Depends(get_db), me: AdminUser = Depends(SALES)):
     if body.result not in RESULT_UZ:
@@ -305,12 +402,36 @@ async def contact(lid: int, body: ContactIn, db: AsyncSession = Depends(get_db),
     cb = parse_iso(body.callback_at)
     if body.result == "callback" and not cb:
         raise HTTPException(400, "Qayta qo'ng'iroq vaqtini kiriting")
-    db.add(ContactLog(lead_id=lid, manager_name=me.name, result=body.result, callback_at=cb, note=body.note))
-    lead.last_contact_at = now_utc()
-    summary = RESULT_UZ[body.result] + (f" ({fmt_datetime(cb)})" if cb else "") + (f": {body.note}" if body.note else "")
-    event(db, lead, "contact", summary=f"{me.name} — {summary}")
+    await set_stage(db, lead, stage_after_contact(lead.stage, body.result), me.name)
+    await log_contact(db, lead, me, body.result, cb, body.note.strip())
     await db.commit()
-    return {"ok": True}
+    return {"ok": True, "stage": lead.stage}
+
+
+class StageIn(BaseModel):
+    stage: str
+    callback_at: str | None = None
+    note: str = ""
+
+
+@router.post("/leads/{lid}/stage")
+async def change_stage(lid: int, body: StageIn, db: AsyncSession = Depends(get_db),
+                       me: AdminUser = Depends(SALES)):
+    """Doskada kartani boshqa ustunga surish. Qayta qo'ng'iroqqa — vaqt bilan, rad etishga — sabab bilan."""
+    if body.stage not in STAGES:
+        raise HTTPException(400, "Noma'lum bosqich")
+    lead = await _lead(db, lid)
+    cb = parse_iso(body.callback_at)
+    note = body.note.strip()
+    if body.stage == "callback" and not cb:
+        raise HTTPException(400, "Qayta qo'ng'iroq vaqtini kiriting")
+    await set_stage(db, lead, body.stage, me.name)
+    if body.stage == "callback":
+        await log_contact(db, lead, me, "callback", cb, note)
+    elif body.stage == "lost" and note:
+        await log_contact(db, lead, me, "refused", None, note)
+    await db.commit()
+    return {"ok": True, "stage": lead.stage}
 
 
 class AssignIn(BaseModel):

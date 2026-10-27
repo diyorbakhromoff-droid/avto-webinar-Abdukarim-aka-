@@ -13,8 +13,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot import texts
 from app.config import get_settings
+from app.domain.pipeline import stage_after_receipt
 from app.models import AdminUser, Funnel, KeyValue, Lead, Payment, Tariff
-from app.services.leads import event, set_step
+from app.services.leads import event, set_stage, set_step
 from app.timeutil import fmt_datetime, now_utc
 
 log = logging.getLogger(__name__)
@@ -65,6 +66,7 @@ async def create_receipt(db: AsyncSession, lead: Lead, *, tariff_id: int | None,
     event(db, lead, "receipt", payment_id=p.id, amount=amount, kind=kind, method=method)
     if lead.payment_status == "none":
         await set_step(db, lead, "receipt_sent", now)
+    await set_stage(db, lead, stage_after_receipt(lead.stage), uploaded_by or "bot")
     await db.commit()
     return p
 
@@ -150,6 +152,7 @@ async def approve(bot: Bot, db: AsyncSession, pid: int, who: str) -> Payment | N
     funnel = await db.get(Funnel, lead.funnel_id)
     tariff = await db.get(Tariff, p.tariff_id) if p.tariff_id else None
     event(db, lead, "payment_approved", payment_id=p.id, kind=p.kind, amount=p.amount, by=who)
+    await set_stage(db, lead, "won", who)
     if p.within_deadline:
         lead.special_price_locked = True
     send_invite = False

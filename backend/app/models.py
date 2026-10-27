@@ -150,6 +150,9 @@ class Lead(Base):
 
     manager_id: Mapped[int | None] = mapped_column(ForeignKey("admin_users.id", ondelete="SET NULL"), index=True)
     last_contact_at: Mapped[datetime | None] = ts()
+    # sotuv doskasi: menejer bosqichi (avtovoronka qadamidan alohida, domain.pipeline.STAGES)
+    stage: Mapped[str] = mapped_column(String(16), default="new", server_default="new", index=True)
+    stage_at: Mapped[datetime] = ts(False, True)
 
     # sxema: teglar va "savolingizni yozing" so'ralgan payt (shu vaqtgacha yozgan matn savol bo'ladi)
     tags: Mapped[list[str]] = mapped_column(ARRAY(String(64)), default=list, server_default=text("'{}'"))
