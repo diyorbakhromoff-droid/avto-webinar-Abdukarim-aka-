@@ -165,6 +165,7 @@ export interface LeadRow {
   last_contact_at: string | null;
   blocked: boolean; unsubscribed: boolean;
   created_at: string;
+  stage: PipelineStage; stage_label: string;
 }
 export type CallListKey =
   | 'deposit_paid' | 'full_paid' | 'offer_not_paid' | 'clicked_no_receipt' | 'receipt_rejected'
@@ -186,7 +187,35 @@ export interface LeadCard extends LeadRow {
   messages: { at: string; title: string; status: string }[];
   tags?: string[];
   flow_runs?: LeadFlowRun[];
+  stage_at: string;
+  /** avtovoronka yo'li: asosiy nuqtalar (bajardi / o'tkazib yubordi / oldinda) */
+  path: FunnelPathStep[];
 }
+export interface FunnelPathStep {
+  key: 'start' | 'phone' | 'session' | 'day1' | 'day2' | 'offer' | 'buy' | 'receipt' | 'paid';
+  label: string; state: 'done' | 'missed' | 'wait'; at: string | null; detail: string;
+}
+
+// ── Sotuv doskasi (amoCRM kabi) ──
+export type PipelineStage = 'new' | 'contacted' | 'callback' | 'waiting_payment' | 'won' | 'lost';
+export interface PipelineCard {
+  id: number; name: string; phone: string | null; username: string | null;
+  stage: PipelineStage; stage_at: string;
+  step: LeadStep; step_label: string; step_since: string;
+  manager: { id: number; name: string } | null;
+  payment_status: PaymentStatus; receipt: LeadRow['receipt']; paid: number;
+  day1_minutes: number | null; day2_minutes: number | null;
+  /** faqat «Qayta qo'ng'iroq» ustunida */
+  callback_at: string | null;
+  /** oxirgi izoh */
+  note: string;
+  blocked: boolean; unsubscribed: boolean; created_at: string;
+}
+export interface PipelineColumn { key: PipelineStage; label: string; count: number; sum: number; items: PipelineCard[] }
+export interface StageInput { stage: PipelineStage; callback_at?: string | null; note?: string }
+// GET  /api/admin/pipeline?funnel_id&<leads filters> -> { stages: PipelineColumn[] }
+// GET  /api/admin/pipeline?funnel_id&<filters>&stage&offset -> { items: PipelineCard[] }
+// POST /api/admin/leads/{id}/stage {stage, callback_at?, note?} -> { ok, stage }
 /** Lidning sxemadagi yo'llari (oxirgi 20 tasi). */
 export interface LeadFlowRun {
   id: number; flow_id: number; flow_name: string;

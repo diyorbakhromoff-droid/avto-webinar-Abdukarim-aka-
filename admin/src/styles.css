@@ -850,3 +850,66 @@ a.chat-name:hover { color: var(--accent); text-decoration: underline; }
   .fe-canvas { height: 70vh; min-height: 420px; flex: 0 0 auto; }
   .fi { position: fixed; inset: 0; z-index: 60; width: auto; border-left: 0; }
 }
+
+/* ── Sotuv doskasi (amoCRM kabi) ── */
+.pl { display: flex; gap: 12px; overflow-x: auto; padding-bottom: 8px; align-items: flex-start; scroll-snap-type: x proximity; }
+.pl-col {
+  flex: 1 0 236px; display: flex; flex-direction: column; min-height: 360px; max-height: max(420px, calc(100vh - 340px));
+  background: var(--subtle); border-radius: 14px; border: 2px solid transparent; scroll-snap-align: start;
+  transition: border-color .12s, background .12s;
+}
+.pl-col-over { border-color: var(--accent); background: var(--accent-bg); }
+.pl-head { padding: 12px 14px 9px; border-bottom: 3px solid; }
+.pl-title { font-weight: 800; font-size: 12px; text-transform: uppercase; letter-spacing: .03em; }
+.pl-meta { font-size: 12px; color: var(--muted); margin-top: 2px; }
+.pl-list { flex: 1; overflow-y: auto; padding: 10px; display: flex; flex-direction: column; gap: 8px; }
+.pl-card {
+  background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px;
+  display: flex; flex-direction: column; gap: 5px; cursor: grab; box-shadow: 0 1px 2px rgba(0,0,0,.04);
+}
+.pl-card:hover { border-color: var(--line-dashed); box-shadow: 0 2px 8px rgba(0,0,0,.07); }
+.pl-card:active { cursor: grabbing; }
+.pl-card-drag { opacity: .4; }
+.pl-card-top { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+.pl-name { font-weight: 800; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pl-since { font-size: 12px; color: var(--muted); white-space: nowrap; }
+.pl-phone { font-size: 13px; color: var(--ink-3); }
+.pl-call { font-size: 12px; font-weight: 700; color: #9A5418; }
+.pl-call-late { color: var(--danger); }
+.pl-paid { font-size: 13px; font-weight: 800; color: var(--success); }
+.pl-note { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pl-mgr { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ink-3); }
+.pl-ava {
+  width: 20px; height: 20px; border-radius: 50%; background: var(--track); display: inline-flex;
+  align-items: center; justify-content: center; font-size: 10px; font-weight: 800;
+}
+.pl-empty { text-align: center; color: var(--muted); font-size: 12px; padding: 18px 0; border: 1px dashed var(--line-dashed); border-radius: 10px; }
+.pl-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; flex: 0 0 auto; vertical-align: middle; }
+.pl-select { display: flex; align-items: center; gap: 8px; }
+.pl-select .select { flex: 1; min-width: 0; }
+.pl-details { padding: 12px; border-radius: 10px; background: var(--surface-2); border: 1px solid var(--line-2); }
+.pl-sec { display: flex; flex-direction: column; gap: 10px; padding-top: 14px; border-top: 1px solid var(--line-2); }
+.pl-sec-title { font-size: 15px; font-weight: 800; }
+@media (max-width: 599px) { .pl-col { flex-basis: 82vw; max-height: none; } }
+
+/* avtovoronka yo'li */
+.fp { list-style: none; margin: 0; padding: 0; }
+.fp-item { position: relative; display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; gap: 10px; align-items: start; padding-bottom: 12px; }
+.fp-item:not(:last-child)::before { content: ''; position: absolute; left: 10px; top: 24px; bottom: 2px; width: 2px; background: var(--line); }
+.fp-done:not(:last-child)::before { background: #9CC7AA; }
+.fp-mark {
+  width: 22px; height: 22px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 800; border: 2px solid var(--line-dashed); background: var(--surface);
+}
+.fp-done .fp-mark { background: var(--success); border-color: var(--success); color: #fff; }
+.fp-missed .fp-mark { background: var(--danger-bg); border-color: var(--danger); color: var(--danger); }
+.fp-body { display: flex; flex-direction: column; min-width: 0; }
+.fp-label { font-weight: 700; }
+.fp-wait .fp-label { color: var(--muted); font-weight: 600; }
+.fp-missed .fp-label { color: var(--danger-ink); }
+.fp-detail { font-size: 12px; color: var(--muted); }
+.fp-at { font-size: 12px; color: var(--muted); white-space: nowrap; padding-top: 2px; }
+@media (max-width: 599px) {
+  .chips-scroll { flex-wrap: nowrap; overflow-x: auto; margin: 0 -16px; padding: 0 16px 4px; scrollbar-width: none; }
+  .chips-scroll .chip { flex: 0 0 auto; }
+}

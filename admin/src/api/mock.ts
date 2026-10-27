@@ -10,8 +10,10 @@ import type {
   FunnelSettings, GlobalSettings, LeadCard, LeadEvent, LeadRow, LeadStep, LiveResults, MediaInfo, PaymentKind,
   PaymentMethod, PaymentRow, QuestionRow, Requisites, SimulationRow, StatsResponse, TariffAdmin, WatchBucket, WatchStats,
   ChainButton, FlowConfig, FlowEdge, FlowGraph, FlowImportPhase, FlowMessage, FlowNode, FlowNodeType, FlowSection, FlowTarget,
+  FunnelPathStep, PipelineCard, PipelineColumn, PipelineStage,
 } from './types';
 import { NODE_LABEL, portsOf } from '../lib/flow';
+import { STAGES, STAGE_LABEL } from '../lib/pipeline';
 import { phaseOf } from '../lib/chain';
 import { CALL_LIST_FALLBACK, MINUTE_SEGMENTS, STEP_LABEL, WATCH_SEGMENTS } from '../lib/labels';
 import { DAY_TRIGGERS, audienceShort, whenLabel } from '../lib/chain';
@@ -175,6 +177,7 @@ const atLeast = (s: LeadStep, min: LeadStep) => s !== 'cold' && ORDER.indexOf(s)
 
 interface LeadState extends LeadRow {
   funnel_id: number;
+  stage_at: string;
   extra?: Pick<LeadCard, 'deadline_at' | 'remaining_amount' | 'remaining_due_date' | 'contacts' | 'events' | 'messages' | 'sessions'>;
 }
 
@@ -187,8 +190,11 @@ function mkLead(id: number, fid: number, forceStep?: LeadStep, name?: string): L
   const pay = step === 'deposit_paid' ? 'deposit' : step === 'full_paid' ? 'full' : 'none';
   const mgr = atLeast(step, 'left_before_offer') && rand() < 0.75 ? pick([{ id: 3, name: 'Nodira' }, { id: 4, name: 'Aziz' }]) : null;
   const fn = name ?? `${pick(FIRST)} ${pick(LAST)}`;
+  const contacted = !!mgr && rand() < 0.6;
+  const stage: PipelineStage = pay !== 'none' ? 'won' : step === 'receipt_sent' || step === 'receipt_rejected' ? 'waiting_payment'
+    : contacted ? pick<PipelineStage>(['contacted', 'callback', 'callback', 'lost']) : 'new';
   return {
-    id, funnel_id: fid, name: fn,
+    id, funnel_id: fid, name: fn, stage, stage_label: STAGE_LABEL[stage], stage_at: iso(NOW - between(5, 60 * 30) * M),
     phone: step === 'started' ? null : `+998 ${pick(['90', '91', '93', '94', '97', '99', '88'])} ${between(100, 999)} ${pad2(between(0, 99))} ${pad2(between(0, 99))}`,
     username: rand() < 0.7 ? `${fn.split(' ')[0].toLowerCase()}_${between(1, 99)}` : null,
     source: pick(SOURCES),
@@ -198,7 +204,7 @@ function mkLead(id: number, fid: number, forceStep?: LeadStep, name?: string): L
     receipt: step === 'receipt_sent' ? 'pending' : step === 'receipt_rejected' ? 'rejected' : pay !== 'none' ? 'approved' : 'none',
     payment_status: pay, manager: mgr, step, step_label: STEP_LABEL[step],
     step_since: iso(Math.min(NOW - 5 * M, created + between(1, 60 * 40) * M)),
-    last_contact_at: mgr && rand() < 0.6 ? iso(NOW - between(1, 72) * H) : null,
+    last_contact_at: contacted ? iso(NOW - between(1, 72) * H) : null,
     blocked: rand() < 0.05, unsubscribed: rand() < 0.03, created_at: iso(created),
   };
 }
@@ -889,10 +895,83 @@ function filterLeads(q: Record<string, string>): LeadState[] {
     .sort((a, z) => Date.parse(z.step_since) - Date.parse(a.step_since));
 }
 const row = (l: LeadState): LeadRow => {
-  const { funnel_id: _f, extra: _e, ...r } = l;
-  void _f; void _e;
+  const { funnel_id: _f, extra: _e, stage_at: _s, ...r } = l;
+  void _f; void _e; void _s;
   return r;
 };
+const paidOf = (l: LeadState) => payments.filter((p) => p.lead_id === l.id && p.status === 'approved' && !p.refunded).reduce((a, p) => a + p.amount, 0)
+  || (l.payment_status === 'full' ? 1990000 : l.payment_status === 'deposit' ? 600000 : 0);
+function pipelineCard(l: LeadState): PipelineCard {
+  const r = row(l);
+  const last = l.extra?.contacts[0] ?? (l.stage === 'callback' ? ensureExtra(l).contacts[0] : undefined);
+  return {
+    id: r.id, name: r.name, phone: r.phone, username: r.username, stage: l.stage, stage_at: l.stage_at,
+    step: r.step, step_label: r.step_label, step_since: r.step_since, manager: r.manager, payment_status: r.payment_status,
+    receipt: r.receipt, paid: paidOf(l), day1_minutes: r.day1_minutes, day2_minutes: r.day2_minutes,
+    callback_at: l.stage === 'callback' ? (last?.callback_at ?? iso(NOW + 3 * H)) : null, note: last?.note ?? '',
+    blocked: r.blocked, unsubscribed: r.unsubscribed, created_at: r.created_at,
+  };
+}
+const PIPE_PAGE = 30;
+function stageSorted(all: LeadState[], st: PipelineStage): PipelineCard[] {
+  const cards = all.filter((l) => l.stage === st).map(pipelineCard);
+  if (st === 'callback') return cards.sort((a, z) => Date.parse(a.callback_at ?? '') - Date.parse(z.callback_at ?? ''));
+  if (st === 'new') return cards.sort((a, z) => Date.parse(z.step_since) - Date.parse(a.step_since));
+  return cards.sort((a, z) => Date.parse(z.stage_at) - Date.parse(a.stage_at));
+}
+on('GET', '/admin/pipeline', (c) => {
+  need(c, 'super_admin', 'sales');
+  const all = filterLeads(c.q);
+  if (c.q.stage) return { items: stageSorted(all, c.q.stage as PipelineStage).slice(n(c.q.offset ?? '0'), n(c.q.offset ?? '0') + PIPE_PAGE) };
+  return {
+    stages: STAGES.map<PipelineColumn>(({ key, label }) => {
+      const cards = stageSorted(all, key);
+      return { key, label, count: cards.length, sum: cards.reduce((a, x) => a + (key === 'won' ? x.paid : 0), 0), items: cards.slice(0, PIPE_PAGE) };
+    }),
+  };
+});
+function setStage(l: LeadState, to: PipelineStage, by: string) {
+  if (l.stage === to) return;
+  addEvent(l, 'stage', 'Sotuv bosqichi', `${STAGE_LABEL[l.stage]} → ${STAGE_LABEL[to]} (${by})`);
+  l.stage = to;
+  l.stage_label = STAGE_LABEL[to];
+  l.stage_at = iso(Date.now());
+}
+on('POST', '/admin/leads/:id/stage', (c) => {
+  const l = leadById(n(c.m[1]));
+  const body = b<{ stage: PipelineStage; callback_at?: string | null; note?: string }>(c);
+  if (body.stage === 'callback' && !body.callback_at) throw new ApiError(400, "Qayta qo'ng'iroq vaqtini kiriting");
+  setStage(l, body.stage, c.user.name);
+  if (body.stage === 'callback' || (body.stage === 'lost' && body.note)) {
+    ensureExtra(l).contacts.unshift({ at: iso(Date.now()), manager: c.user.name, result: body.stage === 'callback' ? 'callback' : 'refused', callback_at: body.callback_at ?? null, note: body.note ?? '' });
+    l.last_contact_at = iso(Date.now());
+  }
+  return { ok: true, stage: l.stage };
+});
+function mockPath(l: LeadState, ex: NonNullable<LeadState['extra']>): FunnelPathStep[] {
+  const reg = Date.parse(l.created_at);
+  const s = settings[l.funnel_id];
+  const d1 = ex.sessions[0] ? Date.parse(ex.sessions[0].day1_at) : null;
+  const pays = payments.filter((p) => p.lead_id === l.id);
+  const day = (key: 'day1' | 'day2', label: string, min: number | null, dur: number, at: number | null, missed: boolean): FunnelPathStep => {
+    if (min !== null) return { key, label, state: key === 'day1' && min / dur < 0.75 ? 'missed' : 'done', at: at ? iso(at) : null, detail: `${min} / ${dur} daq ko'rdi` };
+    if (missed) return { key, label, state: 'missed', at: at ? iso(at) : null, detail: 'kirmadi' };
+    return { key, label, state: 'wait', at: at ? iso(at) : null, detail: at ? 'rejada' : '' };
+  };
+  const d1dur = Math.round(s.day1_duration_sec / 60), d2dur = Math.round(s.day2_duration_sec / 60);
+  return [
+    { key: 'start', label: 'Botga kirdi', state: 'done', at: l.created_at, detail: `manba: ${l.source}` },
+    { key: 'phone', label: 'Telefon berdi', state: l.phone ? 'done' : 'wait', at: l.phone ? iso(reg + M) : null, detail: '' },
+    { key: 'session', label: 'Efir vaqtini tanladi', state: d1 ? 'done' : 'wait', at: d1 ? iso(reg + 2 * M) : null, detail: '' },
+    day('day1', '1-kun efiri', l.day1_minutes, d1dur, d1, l.step === 'day1_missed' || (!!d1 && d1 + D < NOW && l.day1_minutes === null)),
+    day('day2', '2-kun efiri', l.day2_minutes, d2dur, d1 ? d1 + D : null, l.step === 'day2_missed'),
+    l.reached_offer ? { key: 'offer', label: "Ofertagacha ko'rdi", state: 'done', at: d1 ? iso(d1 + D + Math.round(s.day2_offer_sec / 60) * M) : null, detail: '' }
+      : { key: 'offer', label: "Ofertagacha ko'rdi", state: l.day2_minutes !== null ? 'missed' : 'wait', at: null, detail: l.day2_minutes !== null ? 'ofertagacha chiqib ketdi' : '' },
+    { key: 'buy', label: '«Kursga yozilish»ni bosdi', state: l.clicked_buy ? 'done' : 'wait', at: l.clicked_buy && d1 ? iso(d1 + D + 60 * M) : null, detail: '' },
+    { key: 'receipt', label: 'Chek yubordi', state: pays.length || l.receipt !== 'none' ? 'done' : 'wait', at: pays.length ? pays[pays.length - 1].submitted_at : null, detail: { none: '', pending: 'tekshirilmoqda', approved: 'tasdiqlandi', rejected: 'rad etildi' }[l.receipt] },
+    { key: 'paid', label: "To'ladi", state: l.payment_status !== 'none' ? 'done' : 'wait', at: pays.find((p) => p.status === 'approved')?.decided_at ?? null, detail: l.payment_status === 'full' ? "to'liq" : l.payment_status === 'deposit' ? "boshlang'ich" : '' },
+  ];
+}
 on('GET', '/admin/call-lists', (c) => {
   const fid = n(c.q.funnel_id ?? '1');
   const list = leads.filter((l) => l.funnel_id === fid);
@@ -976,7 +1055,7 @@ on('GET', '/admin/leads/:id', (c) => {
   if (l.day1_minutes !== null) watch.push({ day: 1, minutes: l.day1_minutes, duration_min: Math.round(s.day1_duration_sec / 60), percent: Math.round((l.day1_minutes / (s.day1_duration_sec / 60)) * 100), reached_offer: false, offer_min: s.day1_soft_offer_sec ? Math.round(s.day1_soft_offer_sec / 60) : null });
   if (l.day2_minutes !== null) watch.push({ day: 2, minutes: l.day2_minutes, duration_min: Math.round(s.day2_duration_sec / 60), percent: Math.round((l.day2_minutes / (s.day2_duration_sec / 60)) * 100), reached_offer: l.reached_offer, offer_min: Math.round(s.day2_offer_sec / 60) });
   const card: LeadCard = {
-    ...row(l), registered_at: l.created_at, ...ex, watch,
+    ...row(l), registered_at: l.created_at, ...ex, watch, stage_at: l.stage_at, path: mockPath(l, ex),
     payments: payments.filter((p) => p.lead_id === l.id).map(({ funnel_id: _f, ...p }) => (void _f, p)),
   };
   return card;
@@ -985,10 +1064,12 @@ on('POST', '/admin/leads/:id/contact', (c) => {
   const l = leadById(n(c.m[1]));
   const body = b<{ result: ContactResult; callback_at: string | null; note: string }>(c);
   const label = { no_answer: 'Javob bermadi', callback: "Qayta qo'ng'iroq", sold: 'Sotildi', refused: 'Rad etdi' }[body.result];
+  const next: PipelineStage = { sold: 'won', refused: 'lost', callback: l.stage === 'won' ? 'won' : 'callback', no_answer: l.stage === 'new' ? 'contacted' : l.stage }[body.result] as PipelineStage;
+  setStage(l, next, c.user.name);
   ensureExtra(l).contacts.unshift({ at: iso(Date.now()), manager: c.user.name, result: body.result, callback_at: body.callback_at, note: body.note });
   l.last_contact_at = iso(Date.now());
   addEvent(l, 'manager_note', `Menejer izohi — ${c.user.name}`, [label, body.note].filter(Boolean).join(': '));
-  return { ok: true };
+  return { ok: true, stage: l.stage };
 });
 on('POST', '/admin/leads/:id/assign', (c) => {
   const l = leadById(n(c.m[1]));

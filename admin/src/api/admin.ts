@@ -7,7 +7,7 @@ import type {
   MediaInfo, PaymentKind, PaymentMethod, PaymentRow, PaymentsStatusFilter, QuestionRow, Requisites,
   SettingsSaveResponse, SimulationRow, StatsResponse, TariffAdmin, UserInput, WatchStats,
   FlowConfig, FlowEdge, FlowGraph, FlowImportPhase, FlowMessage, FlowMessageInput, FlowNode, FlowNodeType, FlowSection,
-  FlowTarget,
+  FlowTarget, PipelineCard, PipelineColumn, PipelineStage, StageInput,
 } from './types';
 
 export interface LeadsFilter {
@@ -143,7 +143,12 @@ export const api = {
   exportLeads: (fid: number, f: LeadsFilter) =>
     downloadFile('/admin/leads/export.xlsx', q({ funnel_id: fid, ...f, page: undefined, page_size: undefined }), 'lidlar.xlsx'),
   lead: (id: number) => http.get<LeadCard>(`/admin/leads/${id}`),
-  contact: (id: number, body: ContactInput) => http.post<unknown>(`/admin/leads/${id}/contact`, body),
+  contact: (id: number, body: ContactInput) => http.post<{ ok: boolean; stage: PipelineStage }>(`/admin/leads/${id}/contact`, body),
+  pipeline: (fid: number, f: LeadsFilter) =>
+    http.get<{ stages: PipelineColumn[] }>('/admin/pipeline', q({ funnel_id: fid, ...f, page: undefined, page_size: undefined })),
+  pipelineMore: (fid: number, f: LeadsFilter, stage: PipelineStage, offset: number) =>
+    http.get<{ items: PipelineCard[] }>('/admin/pipeline', q({ funnel_id: fid, ...f, page: undefined, page_size: undefined, stage, offset })),
+  setStage: (id: number, body: StageInput) => http.post<{ ok: boolean; stage: PipelineStage }>(`/admin/leads/${id}/stage`, body),
   assign: (id: number, manager_id: number | null) => http.post<unknown>(`/admin/leads/${id}/assign`, { manager_id }),
   setDeadline: (id: number, deadline_at: string) => http.post<unknown>(`/admin/leads/${id}/deadline`, { deadline_at }),
   paymentPlan: (id: number, body: { remaining_amount: number | null; remaining_due_date: string | null }) =>

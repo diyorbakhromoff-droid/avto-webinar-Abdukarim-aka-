@@ -59,6 +59,28 @@ Qanday ishlaydi (`backend/app/services/flow_engine.py`):
 - Kutishsiz halqa (masalan, xabar → o'tish → o'sha xabar) 60 qadamdan keyin to'xtatiladi.
 - «Kunlar bo'yicha» zanjiri o'zgarmagan holda ishlashda davom etadi — sxema unga qo'shimcha.
 
+## Sotuv doskasi (Lidlar → Doska)
+
+Sotuvchilar uchun amoCRM'dagi kabi doska: ustunlar — sotuv bosqichlari, karta — lid. Kartani sichqoncha bilan
+boshqa ustunga suriladi; telefonda kartani bosib, ichidagi «Sotuv bosqichi» orqali o'zgartiriladi. «Ro'yxat»
+ko'rinishi (jadval, Excel) avvalgidek qoldi, filtrlar ikkalasida bir xil.
+
+| Ustun | Lid qanday tushadi |
+| --- | --- |
+| Yangi | Botga kirgan har bir lid. Avtovoronkada yaqinda harakat qilganlar tepada |
+| Bog'lanildi | «Javob bermadi» natijasi yoki qo'lda surilganda |
+| Qayta qo'ng'iroq | Qo'ng'iroq vaqti bilan (vaqti kelganda menejerga Telegram eslatma). Eng yaqin vaqt tepada, o'tib ketgani qizil |
+| To'lov kutilmoqda | Lid chek yuborsa — avtomatik |
+| Sotildi | To'lov tasdiqlansa yoki «Sotildi» natijasi — avtomatik. Ustun tepasida tushgan pul |
+| Rad etdi | «Rad etdi» natijasi (sababi bilan) |
+
+- Bosqich (`leads.stage`) avtovoronka qadamidan (`leads.step`) alohida: kartadagi rangli belgi — lid botda qayerda.
+- Kartani bosganda o'ngdan lid paneli ochiladi: qo'ng'iroq tugmasi, bosqich va menejer, **Avtovoronka yo'li**
+  (botga kirdi → telefon → efir vaqti → 1-kun → 2-kun → oferta → tugma → chek → to'lov; har birida vaqt,
+  ✓ qildi / ✕ o'tkazib yubordi) va aloqa natijalari tarixi. To'liq karta voqealar lentasi bilan avvalgidek.
+- Bosqich o'zgarishi lid voqealar lentasiga yoziladi («Sotuv bosqichi: Yangi → Bog'lanildi (Nodira)»).
+- Doska har daqiqada o'zi yangilanadi.
+
 ## Lokal ishga tushirish
 
 Talablar: Python 3.12+, Node 22, PostgreSQL 16, Redis 7.
@@ -139,7 +161,7 @@ O'z domeniga o'tish: `.env` da `APP_DOMAIN`, `ADMIN_DOMAIN`, `MINIAPP_URL`, `ADM
 
 ## Nima tekshirildi va nima tekshirilmadi
 
-- Backend: 66 ta avtomatik test (PostgreSQL bilan), jumladan botning `/start` → telefon → vaqt → tarif →
+- Backend: 71 ta avtomatik test (PostgreSQL bilan), jumladan botning `/start` → telefon → vaqt → tarif →
   chek → guruhda tasdiq oqimi (Telegram so'rovlari soxta sessiyada).
 - Mini App va admin panel haqiqiy API bilan brauzerda (Playwright) ochib ko'rildi: efir sinxron boshlanadi,
   heartbeat va savollar yoziladi, admin paneldagi barcha sahifalar xatosiz yuklanadi.

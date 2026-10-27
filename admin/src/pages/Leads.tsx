@@ -5,11 +5,14 @@ import type { CallListKey, LeadRow, LeadStep } from '../api/types';
 import { MessageModal } from '../components/MessageModal';
 import { Modal } from '../components/Modal';
 import { NeedFunnel } from '../components/NeedFunnel';
-import { Badge, Empty, ErrorBox, Loading, PageHead, Pagination, type Tone } from '../components/ui';
+import { Board } from '../components/pipeline/Board';
+import { LeadDrawer } from '../components/pipeline/LeadDrawer';
+import { Badge, Empty, ErrorBox, Loading, PageHead, Pagination, Segmented, type Tone } from '../components/ui';
 import { useUser } from '../lib/auth';
 import { sinceLabel } from '../lib/format';
 import { PAYMENT_STATUS_LABEL, RECEIPT_LABEL, STEP_LABEL, options } from '../lib/labels';
 import { useManagers } from '../lib/managers';
+import { STAGE_COLOR } from '../lib/pipeline';
 import { fmtDateTime } from '../lib/time';
 import { useToast } from '../lib/toast';
 import { useLoad } from '../lib/useLoad';
@@ -82,11 +85,24 @@ function AssignModal({ open, ids, onClose, onDone }: { open: boolean; ids: numbe
   );
 }
 
+type View = 'board' | 'list';
+
 function LeadsBody({ fid }: { fid: number }) {
   const me = useUser();
   const toast = useToast();
   const location = useLocation();
   const managers = useManagers();
+  const [sp, setSp] = useSearchParams();
+  const view: View = sp.get('view') === 'list' ? 'list' : 'board';
+  const setView = (v: View) => {
+    const next = new URLSearchParams(sp);
+    if (v === 'list') next.set('view', 'list');
+    else next.delete('view');
+    next.delete('page');
+    setSp(next, { replace: true });
+  };
+  const [openId, setOpenId] = useState<number | null>(null);
+  const [boardTick, setBoardTick] = useState(0);
   const [f, update] = useFilters();
   const [q, setQ] = useState(f.q ?? '');
   const [selected, setSelected] = useState<Set<number>>(new Set());
@@ -96,7 +112,7 @@ function LeadsBody({ fid }: { fid: number }) {
 
   const lists = useLoad(() => api.callLists(fid), [fid]);
   const key = JSON.stringify(f);
-  const leads = useLoad(() => api.leads(fid, { ...f, page_size: PAGE_SIZE }), [fid, key]);
+  const leads = useLoad(view === 'list' ? () => api.leads(fid, { ...f, page_size: PAGE_SIZE }) : null, [fid, key, view]);
 
   useEffect(() => setSelected(new Set()), [fid, key]);
   useEffect(() => setQ(f.q ?? ''), [f.q]);
@@ -137,14 +153,19 @@ function LeadsBody({ fid }: { fid: number }) {
     <>
       <PageHead
         title="Lidlar"
-        sub={leads.data ? `${leads.data.total} ta lid${hasFilters ? ' (filtr bo\'yicha)' : ''}` : undefined}
-        actions={<button type="button" className="btn" onClick={() => void doExport()} disabled={exporting}>{exporting ? 'Tayyorlanmoqda…' : 'Excel eksport'}</button>}
+        sub={view === 'board' ? "Kartani boshqa ustunga suring yoki bosib oching" : leads.data ? `${leads.data.total} ta lid${hasFilters ? ' (filtr bo\'yicha)' : ''}` : undefined}
+        actions={(
+          <>
+            <Segmented label="Ko'rinish" value={view} onChange={setView} options={[{ value: 'board', label: 'Doska' }, { value: 'list', label: "Ro'yxat" }]} />
+            <button type="button" className="btn" onClick={() => void doExport()} disabled={exporting}>{exporting ? 'Tayyorlanmoqda…' : 'Excel eksport'}</button>
+          </>
+        )}
       />
 
       <div className="stack-sm">
         <div className="small strong muted">Qo'ng'iroq ro'yxatlari</div>
         {lists.error ? <ErrorBox error={lists.error} onRetry={lists.reload} /> : (
-          <div className="chips">
+          <div className="chips chips-scroll">
             <button type="button" className={!f.list ? 'chip chip-on' : 'chip'} aria-pressed={!f.list} onClick={() => update({ list: '' })}>Barchasi</button>
             {(lists.data ?? []).map((l) => (
               <button key={l.key} type="button" className={f.list === l.key ? 'chip chip-on' : 'chip'} aria-pressed={f.list === l.key} onClick={() => update({ list: f.list === l.key ? '' : l.key })}>
@@ -191,7 +212,14 @@ function LeadsBody({ fid }: { fid: number }) {
         {hasFilters && <button type="button" className="btn btn-ghost" onClick={() => { setQ(''); update({ list: '', step: '', source: '', manager_id: '', q: '', date_from: '', date_to: '' }); }}>Tozalash</button>}
       </div>
 
-      {selected.size > 0 && (
+      {view === 'board' && (
+        <>
+          <Board fid={fid} filter={(({ page: _p, ...rest }) => rest)(f)} refreshKey={boardTick} onOpen={setOpenId} />
+          <LeadDrawer id={openId} onClose={() => setOpenId(null)} onChanged={() => setBoardTick((t) => t + 1)} />
+        </>
+      )}
+
+      {view === 'list' && selected.size > 0 && (
         <div className="bulk-bar" role="region" aria-label="Tanlangan lidlar">
           <div className="bulk-bar-title">{selected.size} ta lid tanlandi</div>
           <button type="button" className="btn btn-sm btn-gold" onClick={() => setMsgOpen(true)}>Bot orqali xabar</button>
@@ -200,7 +228,7 @@ function LeadsBody({ fid }: { fid: number }) {
         </div>
       )}
 
-      {leads.error && !leads.data ? <ErrorBox error={leads.error} onRetry={leads.reload} /> : !leads.data ? <Loading /> : items.length === 0 ? (
+      {view === 'board' ? null : leads.error && !leads.data ? <ErrorBox error={leads.error} onRetry={leads.reload} /> : !leads.data ? <Loading /> : items.length === 0 ? (
         <Empty title="Lid topilmadi">{hasFilters ? "Filtrlarni o'zgartirib ko'ring." : "Reklama deep link'idan kelgan lidlar shu yerda ko'rinadi."}</Empty>
       ) : (
         <div className="table-wrap" style={{ opacity: leads.loading ? 0.6 : 1 }}>
@@ -209,6 +237,7 @@ function LeadsBody({ fid }: { fid: number }) {
               <tr>
                 <th className="td-check"><input type="checkbox" aria-label="Hammasini tanlash" checked={allOn} onChange={toggleAll} /></th>
                 <th>Ism</th>
+                <th>Bosqich</th>
                 <th>Telefon</th>
                 <th>Manba</th>
                 <th>1-kun</th>
@@ -232,6 +261,7 @@ function LeadsBody({ fid }: { fid: number }) {
                     {l.blocked && <> <Badge tone="danger">bloklagan</Badge></>}
                     {l.unsubscribed && <> <Badge tone="neutral" title="«Xabarlarni to'xtatish» bosgan">to'xtatgan</Badge></>}
                   </td>
+                  <td className="nowrap"><span className="pl-dot" style={{ background: STAGE_COLOR[l.stage] }} aria-hidden="true" /> {l.stage_label}</td>
                   <td className="tnum nowrap">{l.phone ? <a href={`tel:${l.phone.replace(/[^\d+]/g, '')}`}>{l.phone}</a> : <span className="muted">—</span>}</td>
                   <td className="muted">{l.source || '—'}</td>
                   <td>{dayCell(l.day1_minutes, l.step, BEFORE_DAY1)}</td>
@@ -250,7 +280,7 @@ function LeadsBody({ fid }: { fid: number }) {
           </table>
         </div>
       )}
-      {leads.data && <Pagination page={f.page} pageSize={PAGE_SIZE} total={leads.data.total} onChange={(p) => update({ page: p })} />}
+      {view === 'list' && leads.data && <Pagination page={f.page} pageSize={PAGE_SIZE} total={leads.data.total} onChange={(p) => update({ page: p })} />}
 
       <MessageModal open={msgOpen} leadIds={[...selected]} onClose={() => setMsgOpen(false)} onSent={() => setSelected(new Set())} />
       <AssignModal open={assignOpen} ids={[...selected]} onClose={() => setAssignOpen(false)} onDone={() => { setSelected(new Set()); void leads.reload(); }} />

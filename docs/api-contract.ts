@@ -254,6 +254,7 @@ export interface LeadRow {
   last_contact_at: string | null;
   blocked: boolean; unsubscribed: boolean;
   created_at: string;
+  stage: PipelineStage; stage_label: string;   // sotuv doskasidagi bosqich
 }
 export type CallListKey =
   | 'deposit_paid' | 'full_paid' | 'offer_not_paid' | 'clicked_no_receipt' | 'receipt_rejected'
@@ -277,7 +278,8 @@ export interface LeadCard extends LeadRow {
 }
 export type ContactResult = 'no_answer' | 'callback' | 'sold' | 'refused';
 // GET  /api/admin/leads/{id} -> LeadCard
-// POST /api/admin/leads/{id}/contact {result, callback_at, note}
+// POST /api/admin/leads/{id}/contact {result, callback_at, note} -> { ok, stage }
+//   natija bosqichni suradi: no_answer → contacted (faqat «Yangi»dan), callback → callback, sold → won, refused → lost
 // POST /api/admin/leads/{id}/assign {manager_id: number | null}
 // POST /api/admin/leads/{id}/deadline {deadline_at: string}
 // POST /api/admin/leads/{id}/payment-plan {remaining_amount: number|null, remaining_due_date: string|null}
@@ -441,7 +443,32 @@ export type FlowImportPhase = 'reg' | 'day1' | 'between' | 'day2' | 'after';
 // GET    /api/admin/funnels/{id}/flow-targets -> FlowTarget[]
 // Xabar matni: PUT /api/admin/chain/{mid} (FlowMessageInput); zanjirga xabar: POST /api/admin/funnels/{id}/chain {..., flow_node_id}
 
-// GET /api/admin/leads/{id} -> LeadCard & { tags: string[]; flow_runs: LeadFlowRun[] }
+// GET /api/admin/leads/{id} -> LeadCard & { tags: string[]; flow_runs: LeadFlowRun[]; stage_at: string; path: FunnelPathStep[] }
+
+// ── Sotuv doskasi ──
+export type PipelineStage = 'new' | 'contacted' | 'callback' | 'waiting_payment' | 'won' | 'lost';
+/** Avtovoronka yo'li: asosiy nuqtalar (bajardi / o'tkazib yubordi / oldinda). */
+export interface FunnelPathStep {
+  key: 'start' | 'phone' | 'session' | 'day1' | 'day2' | 'offer' | 'buy' | 'receipt' | 'paid';
+  label: string; state: 'done' | 'missed' | 'wait'; at: string | null; detail: string;
+}
+export interface PipelineCard {
+  id: number; name: string; phone: string | null; username: string | null;
+  stage: PipelineStage; stage_at: string;
+  step: LeadStep; step_label: string; step_since: string;
+  manager: { id: number; name: string } | null;
+  payment_status: PaymentStatus; receipt: 'none' | 'pending' | 'approved' | 'rejected';
+  paid: number;                   // tasdiqlangan, qaytarilmagan to'lovlar yig'indisi
+  day1_minutes: number | null; day2_minutes: number | null;
+  callback_at: string | null;     // faqat «Qayta qo'ng'iroq» ustunida
+  note: string;                   // oxirgi izoh
+  blocked: boolean; unsubscribed: boolean; created_at: string;
+}
+// GET  /api/admin/pipeline?funnel_id&<lidlar filtrlari>
+//   -> { stages: { key: PipelineStage; label: string; count: number; sum: number; items: PipelineCard[] }[] }  (har ustunda 30 tadan)
+// GET  /api/admin/pipeline?funnel_id&<filtrlar>&stage&offset -> { items: PipelineCard[] }   (ustunning keyingi kartalari)
+// POST /api/admin/leads/{id}/stage {stage, callback_at?, note?} -> { ok, stage }
+//   callback — vaqt majburiy (qo'ng'iroq eslatmasi yoziladi); lost — note bo'lsa sabab sifatida yoziladi
 /** Lidning sxemadagi yo'llari (oxirgi 20 tasi). */
 export interface LeadFlowRun {
   id: number; flow_id: number; flow_name: string;
