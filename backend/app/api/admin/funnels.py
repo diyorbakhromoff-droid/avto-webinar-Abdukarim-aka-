@@ -93,7 +93,7 @@ async def copy_funnel(fid: int, body: FunnelIn, db: AsyncSession = Depends(get_d
                                                           ChainMessage.flow_node_id.is_(None)))).scalars():
         db.add(ChainMessage(funnel_id=f.id, **{c: getattr(m, c) for c in (
             "title", "kind", "text", "media_ids", "buttons", "trigger_type", "trigger_day", "offset_minutes",
-            "stuck_step", "button_key", "segment", "segment_day", "segment_minute", "required", "status", "sort",
+            "fixed_at", "stuck_step", "button_key", "segment", "segment_day", "segment_minute", "required", "status", "sort",
             "system_key")},
             updated_by=me.name))
     await copy_flows(db, src.id, f.id, me.name)

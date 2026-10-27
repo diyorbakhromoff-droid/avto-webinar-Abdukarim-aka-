@@ -6,7 +6,7 @@ from datetime import time, timedelta
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
-from sqlalchemy import case, func, select
+from sqlalchemy import case, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.admin.leads import payment_out
@@ -14,10 +14,13 @@ from app.api.common import audit, funnel_or_404, iso, parse_iso
 from app.bot import texts
 from app.db import get_db
 from app.domain.segments import SEGMENTS
-from app.models import AdminUser, Broadcast, Lead, LeadSession, Media, Payment, Question, Tariff
+from app.models import (
+    AdminUser, Broadcast, Funnel, Lead, LeadSession, Media, Payment, Question, ScheduledMessage, Tariff,
+)
 from app.security.auth import ANY, CONTENT, SALES
 from app.services import payments as pay
-from app.services.render import Payload, keyboard, send_payload
+from app.services import test_send as ts
+from app.services.render import Payload
 from app.services.tg import get_bot
 from app.timeutil import local_to_utc, now_utc
 
@@ -204,10 +207,58 @@ async def create_broadcast(fid: int, body: BroadcastIn, db: AsyncSession = Depen
         raise HTTPException(400, "Noto'g'ri segment")
     if not body.text.strip() and not body.media_id:
         raise HTTPException(400, "Matn yoki media kiriting")
+    send_at = future_or_400(body.send_at)
     b = Broadcast(funnel_id=fid, segment=body.segment, text=body.text, buttons=body.buttons,
-                  media_id=body.media_id, send_at=parse_iso(body.send_at), status="scheduled", created_by=me.name)
+                  media_id=body.media_id, send_at=send_at, status="scheduled", created_by=me.name)
     db.add(b)
     audit(db, me.name, "broadcast_created", f"segment={body.segment}")
+    await db.commit()
+    return broadcast_out(b)
+
+
+def future_or_400(value: str | None):
+    """Aniq vaqt: Toshkent vaqtida kiritilgan, UTC da saqlanadi; o'tib ketgan vaqt qabul qilinmaydi."""
+    if not value:
+        return None
+    at = parse_iso(value)
+    if not at:
+        raise HTTPException(400, "Sana va vaqt noto'g'ri")
+    if at < now_utc() - timedelta(minutes=1):
+        raise HTTPException(400, "Bu vaqt o'tib ketgan — kelajakdagi vaqtni tanlang")
+    return at
+
+
+class RescheduleIn(BaseModel):
+    send_at: str | None   # None — darhol
+
+
+@router.put("/broadcasts/{bid}")
+async def reschedule_broadcast(bid: int, body: RescheduleIn, db: AsyncSession = Depends(get_db),
+                               me: AdminUser = Depends(CONTENT)):
+    b = await db.get(Broadcast, bid)
+    if not b or b.lead_ids:
+        raise HTTPException(404, "Xabar topilmadi")
+    if b.status != "scheduled":
+        raise HTTPException(400, "Yuborilishi boshlangan xabarning vaqtini o'zgartirib bo'lmaydi")
+    b.send_at = future_or_400(body.send_at)
+    audit(db, me.name, "broadcast_rescheduled", f"#{bid}: {iso(b.send_at) or 'darhol'}")
+    await db.commit()
+    return broadcast_out(b)
+
+
+@router.post("/broadcasts/{bid}/cancel")
+async def cancel_broadcast(bid: int, db: AsyncSession = Depends(get_db), me: AdminUser = Depends(CONTENT)):
+    """Rejadagi xabar butunlay bekor; yuborilayotgan bo'lsa — hali ketmaganlari to'xtatiladi."""
+    b = await db.get(Broadcast, bid)
+    if not b or b.lead_ids:
+        raise HTTPException(404, "Xabar topilmadi")
+    if b.status not in ("scheduled", "sending"):
+        raise HTTPException(400, "Bu xabar allaqachon yuborib bo'lingan")
+    stopped = (await db.execute(
+        update(ScheduledMessage).where(ScheduledMessage.broadcast_id == b.id, ScheduledMessage.status == "pending")
+        .values(status="cancelled", reason="admin bekor qildi").returning(ScheduledMessage.id))).all()
+    b.status = "cancelled"
+    audit(db, me.name, "broadcast_cancelled", f"#{bid}, to'xtatildi: {len(stopped)}")
     await db.commit()
     return broadcast_out(b)
 
@@ -216,16 +267,23 @@ class TestIn(BaseModel):
     text: str = ""
     buttons: list[list[dict]] = []
     media_id: int | None = None
+    target: str = "me"              # me | chat — boshqa manzil yo'q
+    funnel_id: int | None = None
+    lead_id: int | None = None
+    sample_name: str = ""
 
 
 @router.post("/broadcasts/test")
-async def test_broadcast(body: TestIn, db: AsyncSession = Depends(get_db), me: AdminUser = Depends(CONTENT)):
-    if not me.tg_user_id:
-        raise HTTPException(400, "Sozlamalarda Telegram ID ingizni kiriting")
+async def test_broadcast(body: TestIn, db: AsyncSession = Depends(get_db), me: AdminUser = Depends(ANY)):
+    """Ommaviy yoki lidlarga yoziladigan xabarni faqat adminga / test chatiga yuboradi."""
+    if not body.text.strip() and not body.media_id:
+        raise HTTPException(400, "Matn yoki media kiriting")
     media = [m] if body.media_id and (m := await db.get(Media, body.media_id)) else []
     p = Payload(media[0].kind if media else "text", body.text, media, body.buttons)
+    funnel = await db.get(Funnel, body.funnel_id) if body.funnel_id else None
     try:
-        await send_payload(get_bot(), db, me.tg_user_id, p, "[TEST] " + body.text, keyboard(body.buttons))
-    except Exception as e:
-        raise HTTPException(400, f"Yuborib bo'lmadi: {e}")
-    return {"ok": True}
+        r = await ts.send_test(get_bot(), db, me, target=body.target, title="Ommaviy xabar", payload=p,
+                               funnel=funnel, lead_id=body.lead_id, sample_name=body.sample_name)
+    except ts.TestSendError as e:
+        raise HTTPException(400, str(e)) from None
+    return ts.result_out(r)

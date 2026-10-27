@@ -18,6 +18,7 @@ MENU_STOP = "Xabarlarni to'xtatish"
 ASK_QUESTION = "Savolingizni yozing — spikerning jamoasi javob beradi."
 QUESTION_OK = "Savolingiz qabul qilindi. Javob shu yerga keladi."
 FLOW_BUTTON_OLD = "Bu tugma endi faol emas."
+TEST_BUTTON = "🧪 Test xabari. Lid bu tugmani bossa: {what}."
 ANSWER = "<b>Savolingizga javob:</b>\n\n{answer}"
 CHAT_ANSWER = "<b>Efirdagi savolingizga javob</b>\n\n<i>{question}</i>\n\n{answer}"
 

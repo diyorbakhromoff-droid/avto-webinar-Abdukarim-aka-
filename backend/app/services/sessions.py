@@ -17,7 +17,8 @@ class SessionError(Exception):
 
 
 def chain_item(m: ChainMessage) -> ChainItem:
-    return ChainItem(m.id, m.title, m.trigger_type, m.trigger_day, m.offset_minutes, m.required, m.sort)
+    return ChainItem(m.id, m.title, m.trigger_type, m.trigger_day, m.offset_minutes, m.required, m.sort,
+                     m.fixed_at)
 
 
 def session_times(lead: Lead, s: LeadSession, f: Funnel) -> SessionTimes:

@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.bot import flows as bot_flows
 from app.bot import texts
 from app.db import SessionLocal
+from app.domain.planning import stale_reason
 from app.domain.segments import broadcast_allowed, chain_allowed, flow_allowed
 from app.models import (
     Attendance, Broadcast, ChainMessage, FlowNode, Funnel, Lead, LeadSession, Media, ScheduledMessage,
@@ -82,6 +83,10 @@ async def _finish(db: AsyncSession, sm: ScheduledMessage, status: str, reason: s
     if status == "sent":
         sm.sent_at = now_utc()
     await db.commit()
+    what = f"zanjir #{sm.chain_message_id}" if sm.chain_message_id else (
+        f"ommaviy #{sm.broadcast_id}" if sm.broadcast_id else f"sxema bloki #{sm.flow_node_id}")
+    log.log(logging.WARNING if status == "failed" else logging.INFO, "Xabar %s: navbat #%s, lid #%s, %s%s",
+            status, sm.id, sm.lead_id, what, f" — {reason}" if reason else "")
 
 
 async def _postpone(db: AsyncSession, sm: ScheduledMessage, seconds: int, reason: str) -> None:
@@ -145,7 +150,12 @@ async def send_one(bot: Bot, limiter: RateLimiter, sid: int) -> None:
                                   msg.trigger_day)
                 await _send_payload(bot, limiter, db, sm, lead, session, payload)
                 return
-            if session and _results_pending(msg.segment, session, await db.get(Funnel, lead.funnel_id)):
+            funnel = await db.get(Funnel, lead.funnel_id)
+            stale = _stale(msg, sm, session, funnel, lead)
+            if stale:
+                await _finish(db, sm, "skipped", stale)
+                return
+            if session and _results_pending(msg.segment, session, funnel):
                 await _postpone(db, sm, 30, "kun natijasi kutilmoqda")
                 return
             ok, why = chain_allowed(msg.segment, snap, msg.segment_day or msg.trigger_day, msg.segment_minute)
@@ -162,6 +172,10 @@ async def send_one(bot: Bot, limiter: RateLimiter, sid: int) -> None:
             payload = Payload(msg.kind, msg.text, await _media(db, msg.media_ids), msg.buttons or [], msg.trigger_day)
         elif sm.broadcast_id:
             b = await db.get(Broadcast, sm.broadcast_id)
+            stale = None if b.lead_ids else stale_reason("broadcast", b.send_at or sm.send_at, now_utc())
+            if stale:
+                await _finish(db, sm, "skipped", stale)
+                return
             # menejer tanlagan lidlarga xabar ham "xabarlarni to'xtatgan" lidga bormaydi
             allowed = not snap.unsubscribed if b.lead_ids else broadcast_allowed(b.segment, snap)
             if not allowed:
@@ -212,6 +226,15 @@ async def _deliver(bot: Bot, limiter: RateLimiter, db: AsyncSession, sm: Schedul
     await _finish(db, sm, "sent")
 
 
+def _stale(msg: ChainMessage, sm: ScheduledMessage, s: LeadSession | None, f: Funnel, lead: Lead) -> str | None:
+    """Vaqti o'tib ketgan xabar (masalan, worker to'xtab qolgan bo'lsa) noto'g'ri vaqtda yuborilmaydi."""
+    day = msg.trigger_day or 1
+    start = (s.day1_at if day == 1 else s.day2_at) if s else None
+    end = start + timedelta(seconds=f.day1_duration_sec if day == 1 else f.day2_duration_sec) if start else None
+    return stale_reason(msg.trigger_type, sm.send_at, now_utc(), day_start=start, day_end=end,
+                        deadline=lead.deadline_at)
+
+
 def _results_pending(segment: str, s: LeadSession, f: Funnel) -> bool:
     """Kun tugagan, lekin natija hali baholanmagan bo'lsa — segmentni tekshirishni kutamiz."""
     now = now_utc()
@@ -232,6 +255,18 @@ async def _media(db: AsyncSession, ids: list[int]) -> list[Media]:
     return [by_id[i] for i in ids if i in by_id]
 
 
+async def recover_after_restart() -> int:
+    """Qayta ishga tushganda: 'sending' da qolib ketganlar navbatga qaytadi. Navbat bazada turadi, shuning uchun
+    rejalashtirilgan xabarlar yo'qolmaydi; vaqti o'tib ketganlari yuborishda stale_reason bilan tushib qoladi."""
+    async with SessionLocal() as db:
+        n = len((await db.execute(update(ScheduledMessage).where(ScheduledMessage.status == "sending")
+                                  .values(status="pending").returning(ScheduledMessage.id))).all())
+        await db.commit()
+    if n:
+        log.info("Qayta ishga tushish: %s ta xabar navbatga qaytarildi", n)
+    return n
+
+
 async def run_sender(bot: Bot, per_sec: float) -> None:
     limiter = RateLimiter(per_sec)
     sem = asyncio.Semaphore(40)
@@ -248,12 +283,7 @@ async def run_sender(bot: Bot, per_sec: float) -> None:
                                      .values(status="failed", reason="ichki xato"))
                     await db.commit()
 
-    # qayta ishga tushganda 'sending' da qolib ketganlarni qaytaramiz
-    async with SessionLocal() as db:
-        await db.execute(update(ScheduledMessage).where(ScheduledMessage.status == "sending")
-                         .values(status="pending"))
-        await db.commit()
-
+    await recover_after_restart()
     while True:
         ids = await claim_due()
         if ids:

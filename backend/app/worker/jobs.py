@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot import texts
 from app.db import SessionLocal
+from app.domain.planning import stale_reason
 from app.domain.segments import broadcast_allowed
 from app.models import Broadcast, ContactLog, Heartbeat, KeyValue, Lead, ScheduledMessage
 from app.services.leads import snapshot
@@ -54,6 +55,12 @@ async def expand_broadcasts() -> None:
             Broadcast.status == "scheduled",
             (Broadcast.send_at.is_(None)) | (Broadcast.send_at <= now_utc())))).scalars().all()
         for b in due:
+            late = stale_reason("broadcast", b.send_at, now_utc()) if b.send_at else None
+            if late:
+                # server to'xtab qolgan bo'lsa, aniq vaqtga mo'ljallangan xabar kech yuborilmaydi
+                b.status = "expired"
+                log.warning("Ommaviy xabar #%s yuborilmadi: %s", b.id, late)
+                continue
             q = select(Lead).where(Lead.funnel_id == b.funnel_id, Lead.blocked.is_(False))
             if b.lead_ids:
                 q = q.where(Lead.id.in_(b.lead_ids))
@@ -69,6 +76,7 @@ async def expand_broadcasts() -> None:
                 n += 1
             b.recipients = n
             b.status = "sending"
+            log.info("Ommaviy xabar #%s navbatga qo'yildi: %s ta lid", b.id, n)
         await db.commit()
 
         sending = (await db.execute(select(Broadcast).where(Broadcast.status == "sending"))).scalars().all()

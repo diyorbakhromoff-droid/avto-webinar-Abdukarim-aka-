@@ -1,5 +1,5 @@
 """Progrev zanjiri: CRUD, test yuborish, o'zgarishlar tarixi, "lid sifatida sinash"."""
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
@@ -18,7 +18,8 @@ from app.models import AdminUser, ChainHistory, ChainMessage, Flow, FlowNode, Fu
 from app.security.auth import CONTENT
 from app.services import flow_engine
 from app.services.leads import quiet_of
-from app.services.render import Payload, fill, keyboard, send_payload, variables
+from app.services import test_send as ts
+from app.services.render import Payload
 from app.services.sessions import chain_item, replan_message
 from app.services.tg import get_bot
 from app.timeutil import fmt_datetime, now_utc
@@ -26,15 +27,17 @@ from app.timeutil import fmt_datetime, now_utc
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
 TRIGGERS = {"after_registration", "before_day", "at_day_start", "after_day_end", "before_deadline", "left_live",
-            "on_button", "stuck", "flow"}
+            "on_button", "stuck", "flow", "at_datetime"}
+MAX_OFFSET = 60 * 1440   # 60 kun
 # sxemadagi "Zanjir" blokining xabarlari faqat vaqtga bog'langan bo'ladi ("ro'yxatdan keyin" — "zanjirga kirgach")
 CHAIN_ITEM_TRIGGERS = {"after_registration", "before_day", "at_day_start", "after_day_end", "before_deadline"}
 DAY_TRIGGERS = {"before_day", "at_day_start", "after_day_end", "left_live"}
 KINDS = {"text", "photo", "video", "video_note", "voice", "audio", "document", "album"}
 STUCK_STEPS = {"no_phone", "no_session", "no_receipt", "receipt_rejected"}
 EDITABLE = ["title", "kind", "text", "media_ids", "buttons", "trigger_type", "trigger_day", "offset_minutes",
-            "stuck_step", "button_key", "segment", "segment_day", "segment_minute", "required", "status", "sort"]
-TIMING = {"trigger_type", "trigger_day", "offset_minutes", "required", "status", "stuck_step"}
+            "fixed_at", "stuck_step", "button_key", "segment", "segment_day", "segment_minute", "required", "status",
+            "sort"]
+TIMING = {"trigger_type", "trigger_day", "offset_minutes", "fixed_at", "required", "status", "stuck_step"}
 
 
 class ChainIn(BaseModel):
@@ -46,6 +49,7 @@ class ChainIn(BaseModel):
     trigger_type: str
     trigger_day: int | None = None
     offset_minutes: int = 0
+    fixed_at: str | None = None   # at_datetime: ISO (UTC yoki +05:00)
     stuck_step: str | None = None
     button_key: str | None = None
     segment: str = "all"
@@ -86,6 +90,10 @@ def validate(body: ChainIn, node_type: str | None = None) -> None:
         errors.append("Videoning daqiqasini kiriting")
     if body.offset_minutes < 0:
         errors.append("Vaqt manfiy bo'lishi mumkin emas")
+    if body.offset_minutes > MAX_OFFSET:
+        errors.append("Vaqt 60 kundan oshmasin")
+    if body.trigger_type == "at_datetime" and not parse_iso(body.fixed_at):
+        errors.append("Yuborish sanasi va vaqtini kiriting")
     if body.status not in ("active", "draft"):
         errors.append("Holat: active yoki draft")
     if body.kind == "album" and body.buttons:
@@ -120,6 +128,7 @@ async def stats_for(db: AsyncSession, funnel_id: int) -> dict[int, dict]:
 
 def out(m: ChainMessage, stats: dict | None = None) -> dict:
     d = {k: getattr(m, k) for k in ["id", "flow_node_id"] + EDITABLE}
+    d["fixed_at"] = iso(m.fixed_at)
     d.update(updated_at=iso(m.updated_at), updated_by=m.updated_by,
              stats=stats or {"sent": 0, "clicks": 0, "blocked_after": 0},
              warnings=honesty_warnings(m.text) + honesty_warnings(m.title))
@@ -159,8 +168,9 @@ async def create(fid: int, body: ChainIn, db: AsyncSession = Depends(get_db), me
     if node and node.type == "message":
         raise HTTPException(400, "«Xabar» blokida bitta xabar bo'ladi — uni tahrirlang")
     validate(body, node.type if node else None)
-    m = ChainMessage(funnel_id=fid, **{**body.model_dump(), "buttons": ensure_button_ids(body.buttons)},
-                     updated_by=me.name)
+    fixed = fixed_of(body, None)
+    m = ChainMessage(funnel_id=fid, **{**body.model_dump(), "buttons": ensure_button_ids(body.buttons),
+                                       "fixed_at": fixed}, updated_by=me.name)
     db.add(m)
     await db.flush()
     db.add(ChainHistory(message_id=m.id, user_name=me.name, changes={"created": [None, body.title]}))
@@ -178,7 +188,8 @@ async def update(mid: int, body: ChainIn, db: AsyncSession = Depends(get_db), me
     validate(body, node.type if node else None)
     new = body.model_dump(exclude={"flow_node_id"})
     new["buttons"] = ensure_button_ids(new["buttons"])
-    changes = {k: [getattr(m, k), v] for k, v in new.items() if getattr(m, k) != v}
+    new["fixed_at"] = fixed_of(body, m.fixed_at)
+    changes = {k: [jsonable(getattr(m, k)), jsonable(v)] for k, v in new.items() if getattr(m, k) != v}
     for k, v in new.items():
         setattr(m, k, v)
     if changes:
@@ -192,6 +203,21 @@ async def update(mid: int, body: ChainIn, db: AsyncSession = Depends(get_db), me
         await drop_stale_edges(db, node, m.buttons)
     await db.commit()
     return out(m)
+
+
+def jsonable(v):
+    return iso(v) if isinstance(v, datetime) else v
+
+
+def fixed_of(body: ChainIn, current: datetime | None) -> datetime | None:
+    """Aniq vaqt faqat at_datetime da saqlanadi. Yangi kiritilgan vaqt kelajakda bo'lishi shart
+    (o'zgarmagan eski vaqt bilan matnni tahrirlash mumkin)."""
+    if body.trigger_type != "at_datetime":
+        return None
+    at = parse_iso(body.fixed_at)
+    if at != current and at < now_utc() - timedelta(minutes=1):
+        raise HTTPException(400, "Bu vaqt o'tib ketgan — kelajakdagi sana va vaqtni tanlang")
+    return at
 
 
 async def drop_stale_edges(db: AsyncSession, node: FlowNode, buttons: list) -> None:
@@ -229,26 +255,32 @@ async def duplicate(mid: int, db: AsyncSession = Depends(get_db), me: AdminUser 
     return out(copy)
 
 
+class TestIn(BaseModel):
+    target: str = "me"            # me | chat — boshqa manzil yo'q
+    lead_id: int | None = None    # shu lidning ma'lumotlari bilan; bo'lmasa namunaviy
+    sample_name: str = ""
+
+
 @router.post("/chain/{mid}/test")
-async def test_send(mid: int, db: AsyncSession = Depends(get_db), me: AdminUser = Depends(CONTENT)):
+async def test_send(mid: int, body: TestIn | None = None, db: AsyncSession = Depends(get_db),
+                    me: AdminUser = Depends(CONTENT)):
+    """Saqlangan xabarni faqat adminga yoki test chatiga yuboradi (lidlarga va navbatga tegmaydi)."""
+    body = body or TestIn()
     m = await db.get(ChainMessage, mid)
     if not m:
         raise HTTPException(404, "Xabar topilmadi")
-    if not me.tg_user_id:
-        raise HTTPException(400, "Sozlamalarda Telegram ID ingizni kiriting")
     media = []
     if m.media_ids:
-        media = list((await db.execute(select(Media).where(Media.id.in_(m.media_ids)))).scalars())
-    vars_ = variables(None, None, m.trigger_day)
-    vars_.update(ism=me.name, efir_sanasi="23-oktabr, payshanba", efir_vaqti="20:00",
-                 deadline=fmt_datetime(now_utc()))
+        by_id = {x.id: x for x in (await db.execute(select(Media).where(Media.id.in_(m.media_ids)))).scalars()}
+        media = [by_id[i] for i in m.media_ids if i in by_id]
     p = Payload(m.kind, m.text, media, m.buttons or [], m.trigger_day)
     try:
-        await send_payload(get_bot(), db, me.tg_user_id, p, "[TEST] " + fill(m.text, vars_) if m.text else "",
-                           keyboard(m.buttons or []))
-    except Exception as e:
-        raise HTTPException(400, f"Yuborib bo'lmadi: {e}. Botga /start bosganmisiz?")
-    return {"ok": True}
+        r = await ts.send_test(get_bot(), db, me, target=body.target, title=m.title, payload=p,
+                               funnel=await db.get(Funnel, m.funnel_id), lead_id=body.lead_id,
+                               sample_name=body.sample_name)
+    except ts.TestSendError as e:
+        raise HTTPException(400, str(e)) from None
+    return ts.result_out(r)
 
 
 @router.get("/chain/{mid}/history")
@@ -268,7 +300,13 @@ TRIGGER_LABEL = {
     "at_day_start": "{d}-kun boshlanishida +{o}", "after_day_end": "{d}-kun tugagach +{o}",
     "before_deadline": "deadline tugashidan {o} oldin", "left_live": "{d}-kun efiridan chiqib ketgach {o}",
     "on_button": "tugma bosilganda", "stuck": "to'xtab qolganda ({o})", "flow": "sxemada",
+    "at_datetime": "aniq vaqtda: {f}",
 }
+
+
+def trigger_label(m: ChainMessage) -> str:
+    return TRIGGER_LABEL[m.trigger_type].format(d=m.trigger_day, o=fmt_offset(m.offset_minutes),
+                                                f=fmt_datetime(m.fixed_at) if m.fixed_at else "—")
 
 
 def segment_label(m: ChainMessage) -> str:
@@ -308,7 +346,7 @@ async def simulate(fid: int, body: SimulateIn, db: AsyncSession = Depends(get_db
             reason = ((reason + "; ") if reason else "") + f"faqat: {segment_label(m)}"
         rows.append({
             "message_id": m.id, "title": m.title,
-            "trigger": TRIGGER_LABEL[m.trigger_type].format(d=m.trigger_day, o=fmt_offset(m.offset_minutes)),
+            "trigger": trigger_label(m),
             "send_at": iso(p.send_at), "status": p.status, "reason": reason,
         })
     return rows

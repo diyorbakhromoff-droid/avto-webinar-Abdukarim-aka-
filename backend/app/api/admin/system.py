@@ -8,7 +8,9 @@ from app.api.common import audit, iso
 from app.config import get_settings
 from app.db import get_db
 from app.models import AdminUser, AuditLog, ChainMessage, KeyValue, Lead, ScheduledMessage
-from app.security.auth import ROLES, SUPER, create_token, current_user, hash_password, verify_password
+from app.security.auth import ANY, ROLES, SUPER, create_token, current_user, hash_password, verify_password
+from app.services import test_send as ts
+from app.services.tg import get_bot
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
@@ -93,24 +95,58 @@ async def managers(db: AsyncSession = Depends(get_db), _=Depends(current_user)):
 
 class GlobalSettingsIn(BaseModel):
     admin_group_chat_id: int | None = None
+    test_chat_id: int | None = None
+
+
+async def _kv(db: AsyncSession, key: str):
+    kv = await db.get(KeyValue, key)
+    return kv.value if kv else None
+
+
+async def _set_kv(db: AsyncSession, key: str, value) -> None:
+    kv = await db.get(KeyValue, key)
+    if kv:
+        kv.value = value
+    else:
+        db.add(KeyValue(key=key, value=value))
 
 
 @router.get("/settings")
 async def get_global(db: AsyncSession = Depends(get_db), _=Depends(SUPER)):
-    kv = await db.get(KeyValue, "admin_group_chat_id")
-    return {"admin_group_chat_id": kv.value if kv else None, "bot_username": get_settings().bot_username}
+    return {"admin_group_chat_id": await _kv(db, "admin_group_chat_id"),
+            "test_chat_id": await _kv(db, ts.TEST_CHAT_KEY), "test_chat_title": await _kv(db, "test_chat_title"),
+            "bot_username": get_settings().bot_username}
 
 
 @router.put("/settings")
 async def put_global(body: GlobalSettingsIn, db: AsyncSession = Depends(get_db), me: AdminUser = Depends(SUPER)):
-    kv = await db.get(KeyValue, "admin_group_chat_id")
-    if kv:
-        kv.value = body.admin_group_chat_id
-    else:
-        db.add(KeyValue(key="admin_group_chat_id", value=body.admin_group_chat_id))
-    audit(db, me.name, "settings_updated", f"admin_group_chat_id={body.admin_group_chat_id}")
+    """Faqat yuborilgan maydonlar o'zgaradi. Test chati saqlashdan oldin tekshiriladi (bot unga yoza oladimi)."""
+    data = body.model_dump(exclude_unset=True)
+    if "admin_group_chat_id" in data:
+        await _set_kv(db, "admin_group_chat_id", data["admin_group_chat_id"])
+    if "test_chat_id" in data:
+        title = None
+        if cid := data["test_chat_id"]:
+            try:
+                chat = await get_bot().get_chat(cid)
+                title = chat.title or chat.full_name or str(cid)
+                await get_bot().send_message(cid, "✅ Test chati ulandi. Admin paneldan yuborilgan test xabarlari "
+                                                  "shu yerga keladi — lidlar ularni ko'rmaydi.")
+            except Exception as e:  # noqa: BLE001
+                raise HTTPException(400, ts.explain(e)) from None
+        await _set_kv(db, ts.TEST_CHAT_KEY, cid)
+        await _set_kv(db, "test_chat_title", title)
+    audit(db, me.name, "settings_updated", ", ".join(f"{k}={v}" for k, v in data.items()))
     await db.commit()
     return await get_global(db)
+
+
+@router.get("/test-targets")
+async def test_targets(db: AsyncSession = Depends(get_db), me: AdminUser = Depends(ANY)):
+    """Test xabari qayerga yuborilishi mumkin: faqat o'zingizga yoki test chatiga."""
+    chat_id = await ts.test_chat_id(db)
+    return {"me": {"ready": bool(me.tg_user_id)},
+            "chat": {"ready": bool(chat_id), "title": await _kv(db, "test_chat_title") if chat_id else None}}
 
 
 @router.get("/audit")

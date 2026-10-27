@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot import flows, texts
 from app.models import ChainMessage, Funnel, Lead, LeadStep, Media, Question, ScheduledMessage, Tariff
-from app.services import flow_engine, payments
+from app.services import flow_engine, payments, test_send
 from app.services.leads import cancel_pending, event, lead_for_tg, plan_stuck_messages, set_step
 from app.services.render import Payload, fill, send_payload, variables
 from app.services.sessions import SessionError, choose_day1, choose_day2
@@ -259,6 +259,13 @@ async def flow_button(call: CallbackQuery, db: AsyncSession):
         result = await flow_engine.on_button(db, call.from_user.id, int(parts[1]), int(parts[2]), int(parts[3]))
         await db.commit()
     await call.answer(texts.FLOW_BUTTON_OLD if result in ("old", "inactive") else None)
+
+
+@router.callback_query(F.data.startswith("t:"))
+async def test_button(call: CallbackQuery):
+    """Admin paneldan yuborilgan test xabaridagi tugma: hech narsa o'zgarmaydi, faqat nima bo'lishi aytiladi."""
+    what = test_send.BUTTON_HINTS.get(call.data[2:], "tegishli amal bajariladi")
+    await call.answer(texts.TEST_BUTTON.format(what=what), show_alert=True)
 
 
 @router.callback_query(F.data.startswith("resched:"))

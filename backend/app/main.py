@@ -7,7 +7,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api import miniapp
-from app.api.admin import chain, flows, funnels, leads, ops, stats, system
+from app.api.admin import chain, flows, funnels, leads, ops, stats, system, timing
 from app.db import get_db
 from app.models import Broadcast, ChainMessage, Lead, ScheduledMessage
 from app.services.leads import event
@@ -16,7 +16,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name
 
 app = FastAPI(title="Avtowebinar API", docs_url="/api/docs", openapi_url="/api/openapi.json")
 for r in (miniapp.router, system.router, funnels.router, chain.router, flows.router, leads.router, ops.router,
-          stats.router):
+          stats.router, timing.router):
     app.include_router(r)
 
 

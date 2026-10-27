@@ -331,7 +331,7 @@ async def lead_card(lid: int, db: AsyncSession = Depends(get_db), _=Depends(SALE
     events = (await db.execute(select(LeadEvent).where(LeadEvent.lead_id == lid)
                                .order_by(LeadEvent.at.desc(), LeadEvent.id.desc()).limit(300))).scalars()
     msgs = (await db.execute(
-        select(ScheduledMessage, ChainMessage.title, Broadcast.id)
+        select(ScheduledMessage, ChainMessage.title, Broadcast.id, ChainMessage.flow_node_id)
         .outerjoin(ChainMessage, ChainMessage.id == ScheduledMessage.chain_message_id)
         .outerjoin(Broadcast, Broadcast.id == ScheduledMessage.broadcast_id)
         .where(ScheduledMessage.lead_id == lid, ScheduledMessage.status != "cancelled")
@@ -359,9 +359,11 @@ async def lead_card(lid: int, db: AsyncSession = Depends(get_db), _=Depends(SALE
                    for r, fname, ntitle, ntype in runs],
         events=[{"at": iso(e.at), "type": e.type, "title": EVENT_TITLES.get(e.type, e.type),
                  "details": event_details(e)} for e in events],
-        messages=[{"at": iso(sm.sent_at or sm.send_at), "title": title or (f"Ommaviy xabar #{bid}" if bid else "—"),
-                   "status": status_uz.get(sm.status, sm.status) + (f" ({sm.reason})" if sm.reason else "")}
-                  for sm, title, bid in msgs],
+        messages=[{"id": sm.id, "at": iso(sm.sent_at or sm.send_at),
+                   "title": title or (f"Ommaviy xabar #{bid}" if bid else "—"),
+                   "status": status_uz.get(sm.status, sm.status) + (f" ({sm.reason})" if sm.reason else ""),
+                   "cancellable": sm.status == "pending" and not (sm.flow_run_id or sm.flow_node_id or node_id)}
+                  for sm, title, bid, node_id in msgs],
     )
     return card
 

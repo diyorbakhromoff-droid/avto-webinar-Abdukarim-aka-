@@ -253,6 +253,7 @@ class ChainMessage(Base):
     trigger_type: Mapped[str] = mapped_column(String(24))
     trigger_day: Mapped[int | None] = mapped_column(Integer)
     offset_minutes: Mapped[int] = mapped_column(Integer, default=0)
+    fixed_at: Mapped[datetime | None] = ts()   # trigger "at_datetime": aniq sana va vaqt (UTC da saqlanadi)
     stuck_step: Mapped[str | None] = mapped_column(String(24))
     button_key: Mapped[str | None] = mapped_column(String(64))
     segment: Mapped[str] = mapped_column(String(24), default="all")

@@ -7,6 +7,8 @@ Qoidalar:
    kamida 20 daqiqa farq bilan yuboriladi.
 4. Tungi tinchlik: oraliqqa tushgan xabar oraliq tugashiga suriladi.
 Segment rejalashtirishda emas, yuborish paytida tekshiriladi (5-qoida).
+6. Aniq sana-vaqt (at_datetime): har bir lidga bir marta, aynan shu vaqtda; o'tib ketgan bo'lsa — yuborilmaydi.
+7. Kechikish: worker to'xtab qolib, xabar vaqti o'tib ketgan bo'lsa, noto'g'ri vaqtda yuborilmaydi (stale_reason).
 """
 from dataclasses import dataclass
 from datetime import datetime, time, timedelta
@@ -17,6 +19,9 @@ COMPRESS_MARGIN = timedelta(minutes=30)
 COMPRESS_MIN_GAP = timedelta(minutes=20)
 # "Efir boshlandi" kabi xabarlar katta sessiyada hammaga 2 daqiqada yetishi uchun 1 daqiqa oldin boshlanadi
 DAY_START_LEAD = timedelta(minutes=1)
+# yuborish paytida: shuncha kechikkan xabar endi yuborilmaydi (masalan, server to'xtab qolgan bo'lsa)
+MAX_LATE = timedelta(hours=6)
+EXACT_MAX_LATE = timedelta(hours=1)     # aniq vaqtli xabarlar (sana-soat, ommaviy xabar)
 
 
 @dataclass(frozen=True)
@@ -29,6 +34,7 @@ class ChainItem:
     offset_minutes: int
     required: bool
     sort: int = 0
+    fixed_at: datetime | None = None   # at_datetime
 
 
 @dataclass(frozen=True)
@@ -64,6 +70,7 @@ class PlannedMessage:
 
 
 SESSION_TRIGGERS = {"before_day", "at_day_start", "after_day_end", "before_deadline"}
+FIXED_TRIGGERS = {"at_datetime"}
 EVENT_TRIGGERS = {"on_button", "stuck", "left_live"}
 
 
@@ -108,6 +115,8 @@ def plan_chain(items: list[ChainItem], s: SessionTimes, now: datetime,
     for item in items:
         if item.trigger_type in SESSION_TRIGGERS:
             out.append(_plan_session_item(item, s, now, quiet))
+        elif item.trigger_type in FIXED_TRIGGERS:
+            out.append(plan_fixed(item, now))
         elif item.trigger_type in EVENT_TRIGGERS:
             out.append(PlannedMessage(item, None, "event", "voqea bo'yicha yuboriladi", session_bound=False))
 
@@ -156,6 +165,33 @@ def _plan_session_item(item: ChainItem, s: SessionTimes, now: datetime, quiet: Q
         return PlannedMessage(item, shift_out_of_quiet(t, quiet.start, quiet.end), "quiet_shifted",
                               "tungi tinchlik: surildi")
     return PlannedMessage(item, t, "scheduled")
+
+
+def plan_fixed(item: ChainItem, now: datetime) -> PlannedMessage:
+    """Aniq sana-vaqt: sessiyaga bog'liq emas (efir vaqti o'zgarsa ham o'zgarmaydi), tungi tinchlik qo'llanmaydi —
+    vaqtni admin aniq tanlagan."""
+    if item.fixed_at is None:
+        return PlannedMessage(item, None, "skipped", "sana belgilanmagan", session_bound=False)
+    if item.fixed_at < now - timedelta(minutes=2):
+        return PlannedMessage(item, None, "skipped", "vaqti o'tib ketgan", session_bound=False)
+    return PlannedMessage(item, max(item.fixed_at, now), "scheduled", session_bound=False)
+
+
+def stale_reason(trigger_type: str, send_at: datetime, now: datetime, *, day_start: datetime | None = None,
+                 day_end: datetime | None = None, deadline: datetime | None = None) -> str | None:
+    """Yuborish paytidagi tekshiruv: xabar endi ma'nosiz bo'lsa — sababi, aks holda None.
+    Masalan, "efirga 30 daqiqa qoldi" eslatmasi efir boshlangandan keyin bormaydi."""
+    if trigger_type == "before_day" and day_start and now >= day_start:
+        return "efir boshlanib bo'lgan — eslatma kechikdi"
+    if trigger_type == "at_day_start" and day_end and now >= day_end:
+        return "efir tugagan"
+    if trigger_type == "before_deadline" and deadline and now >= deadline:
+        return "deadline tugagan"
+    limit = EXACT_MAX_LATE if trigger_type in FIXED_TRIGGERS | {"broadcast"} else MAX_LATE
+    late = now - send_at
+    if late > limit:
+        return f"vaqti o'tib ketgan ({int(late.total_seconds() // 60)} daq kechikdi)"
+    return None
 
 
 def plan_stuck(item: ChainItem, step_entered_at: datetime, quiet: QuietHours = QuietHours()) -> datetime:
