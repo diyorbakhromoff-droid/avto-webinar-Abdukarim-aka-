@@ -332,6 +332,10 @@ export interface TestTargets { me: { ready: boolean }; chat: { ready: boolean; t
 // POST /api/admin/chain/{mid}/test TestRequest -> TestResult
 // POST /api/admin/broadcasts/test {text, buttons, media_id, funnel_id} & TestRequest -> TestResult
 // GET  /api/admin/test-targets -> TestTargets
+/** Butun progrev (kunlar bo'yicha zanjir yoki sxema bo'limi) — ketma-ket, har biri oldidan «qachon va kimga». */
+export interface ProgrevTestRequest extends TestRequest { registered_at?: string; day1_at?: string; flow_id?: number }
+export type ProgrevTestResult = TestResult & { count: number; eta_sec: number };
+// POST /api/admin/funnels/{id}/test-progrev ProgrevTestRequest -> ProgrevTestResult   (fonda yuboriladi)
 
 // ── Xabarlar vaqti ──
 export interface TimingMessage {

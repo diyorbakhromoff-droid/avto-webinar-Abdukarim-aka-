@@ -14,11 +14,13 @@ const VAR_LABEL: Record<string, string> = { ism: 'Ism', efir_sanasi: 'Efir sanas
  * «🧪 Test xabarini yuborish»: xabar faqat adminning o'ziga yoki test chatiga boradi — lidlarga emas.
  * send — xabar turiga qarab (zanjir xabari / ommaviy xabar) tegishli endpointni chaqiradi.
  */
-export function TestSendModal({ open, title, onClose, send }: {
+export function TestSendModal({ open, title, onClose, send, many }: {
   open: boolean;
   title: string;
   onClose: () => void;
   send: (req: TestRequest) => Promise<TestResult>;
+  /** butun progrev: xabarlar fonda ketma-ket yuboriladi */
+  many?: boolean;
 }) {
   const me = useUser();
   const { funnel } = useFunnel();
@@ -60,7 +62,7 @@ export function TestSendModal({ open, title, onClose, send }: {
   };
 
   return (
-    <Modal open={open} onClose={onClose} title="🧪 Test xabarini yuborish" size="md"
+    <Modal open={open} onClose={onClose} title={many ? '🧪 Butun progrevni testga yuborish' : '🧪 Test xabarini yuborish'} size="md"
       footer={(
         <>
           <button type="button" className="btn" onClick={onClose}>Yopish</button>
@@ -70,8 +72,12 @@ export function TestSendModal({ open, title, onClose, send }: {
         </>
       )}>
       <div className="box box-info small">
-        <div>«{title}» faqat siz tanlagan joyga boradi — <b>lidlarga yuborilmaydi</b> va navbatga qo'shilmaydi.
-          Lidlarga odatdagi tartibda (zanjir yoki ommaviy xabar) ketadi.</div>
+        <div>
+          {many
+            ? <>«{title}»ning barcha xabarlari lidga boradigan tartibda, har biri oldidan «qachon va kimga» izohi bilan keladi. </>
+            : <>«{title}» faqat siz tanlagan joyga boradi. </>}
+          <b>Lidlarga yuborilmaydi</b> va navbatga qo'shilmaydi. Lidlarga odatdagi tartibda (zanjir yoki ommaviy xabar) ketadi.
+        </div>
       </div>
 
       <div className="field">
@@ -119,7 +125,7 @@ export function TestSendModal({ open, title, onClose, send }: {
 
       {result && 'ok' in result && (
         <div className="box box-success box-col" role="status">
-          <div><b>✅ Yuborildi</b> — {result.ok.target}, {result.ok.sent_at_label}. Telegramni oching va matn, media, tugmalar va havolalarni tekshiring.</div>
+          <div><b>✅ {many ? 'Yuborish boshlandi' : 'Yuborildi'}</b> — {result.ok.target}, {result.ok.sent_at_label}. Telegramni oching va matn, media, tugmalar va havolalarni tekshiring.</div>
           <div className="small">Ma'lumot: {result.ok.data_source}</div>
           <div className="small test-vars">
             {Object.entries(result.ok.variables).map(([k, v]) => (

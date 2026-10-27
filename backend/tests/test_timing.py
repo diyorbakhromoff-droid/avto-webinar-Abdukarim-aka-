@@ -366,3 +366,71 @@ async def test_bot_announces_group_id_and_tracks_migration(db, bot):
     other = await db.get(KeyValue, "admin_group_chat_id")
     await db.refresh(other)
     assert other.value == -999
+
+
+# ─────────────────────────── butun progrevni testga ───────────────────────────
+
+@pytest.fixture
+def seq_bot(bot, monkeypatch):
+    monkeypatch.setattr("app.services.test_send.get_bot", lambda: bot)
+    monkeypatch.setattr("app.services.test_send.PRIVATE_GAP", 0)
+    monkeypatch.setattr("app.services.test_send.GROUP_GAP", 0)
+    return bot
+
+
+async def test_whole_chain_goes_to_admin_in_send_order(db, client, seq_bot):
+    f = await make_funnel(db)
+    lead = await make_lead(db, f, tash(TUE, 9))
+    _, h = await admin(db)
+    r = await client.post(f"/api/admin/funnels/{f.id}/test-progrev", headers=h,
+                          json={"target": "me", "sample_name": "Aziza",
+                                "registered_at": tash(TUE, 9).isoformat(), "day1_at": tash(TUE, 20).isoformat()})
+    assert r.status_code == 200, r.text
+    assert r.json()["count"] == 7
+    texts = [c[1][1] for c in seq_bot.calls if c[0] == "send_message"]
+    assert all(c[1][0] == 777 for c in seq_bot.calls if c[0] == "send_message")
+    assert "7 ta xabar" in texts[0] and texts[-1].startswith("✅ Tugadi: 7 / 7")
+    bodies = texts[2:-1:2]
+    # vaqt tartibida: 2 soat oldin (18:00) → boshlandi (19:59) → spiker (ro'yxatdan 4 soat, 13:00) emas — 13:00 birinchi
+    assert bodies[:3] == ["Spiker: Aziza", "2 soat: Aziza", "Boshlandi: Aziza"]
+    assert "soat 13:00" in texts[1] and "ro'yxatdan 4 soat keyin" in texts[1]
+    assert any("lidning harakatiga qarab" in t for t in texts)       # "Vaqt tanlang" (to'xtab qolganda) oxirida
+    assert (await db.execute(select(func.count()).select_from(ScheduledMessage))).scalar() == 0
+    assert not (await db.execute(select(LeadEvent).where(LeadEvent.lead_id == lead.id))).first()
+
+    test_send._running.add(777)
+    try:
+        r = await client.post(f"/api/admin/funnels/{f.id}/test-progrev", headers=h, json={"target": "me"})
+        assert r.status_code == 409
+    finally:
+        test_send._running.discard(777)
+
+
+async def test_flow_section_follows_arrows_and_buttons(db, client, seq_bot):
+    from app.models import Flow, FlowEdge, FlowNode
+    f = await make_funnel(db)
+    flow = Flow(funnel_id=f.id, name="1-kundan keyin", status="active")
+    db.add(flow)
+    await db.flush()
+    start = FlowNode(flow_id=flow.id, type="start", title="Efir tugadi", x=0, y=0, config={"event": "day_end"})
+    ask = FlowNode(flow_id=flow.id, type="message", title="Savol", x=300, y=0, config={})
+    yes = FlowNode(flow_id=flow.id, type="message", title="Ha javobi", x=600, y=0, config={})
+    no = FlowNode(flow_id=flow.id, type="message", title="Yo'q javobi", x=600, y=200, config={})
+    db.add_all([start, ask, yes, no])
+    await db.flush()
+    btns = [[{"type": "next", "text": "Ha", "id": "y1"}], [{"type": "next", "text": "Yo'q", "id": "n1"}]]
+    for node, text, b in ((ask, "Yoqdimi, {ism}?", btns), (yes, "Zo'r!", []), (no, "Afsus", [])):
+        db.add(ChainMessage(funnel_id=f.id, title=node.title, text=text, trigger_type="flow", buttons=b,
+                            flow_node_id=node.id))
+    db.add_all([FlowEdge(flow_id=flow.id, from_node_id=start.id, from_port="next", to_node_id=ask.id),
+                FlowEdge(flow_id=flow.id, from_node_id=ask.id, from_port="b:n1", to_node_id=no.id),
+                FlowEdge(flow_id=flow.id, from_node_id=ask.id, from_port="b:y1", to_node_id=yes.id)])
+    await db.commit()
+    _, h = await admin(db)
+    r = await client.post(f"/api/admin/funnels/{f.id}/test-progrev", headers=h,
+                          json={"target": "me", "flow_id": flow.id})
+    assert r.status_code == 200, r.text
+    texts = [c[1][1] for c in seq_bot.calls if c[0] == "send_message"]
+    assert "Sxema" in texts[0]
+    assert texts[2] == "Yoqdimi, Madina?" and texts[4] == "Zo'r!" and texts[6] == "Afsus"   # tugmalar tartibida
+    assert "«Savol» → «Ha» tugmasi" in texts[3] and "«Savol» → «Yo'q» tugmasi" in texts[5]

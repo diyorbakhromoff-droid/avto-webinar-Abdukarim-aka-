@@ -4,6 +4,7 @@ import { api } from '../api/admin';
 import type { QueueRow, TimingMessage, TimingPage, TriggerType } from '../api/types';
 import { Modal } from '../components/Modal';
 import { NeedFunnel } from '../components/NeedFunnel';
+import { TestSendModal } from '../components/TestSendModal';
 import { NumberInput } from '../components/fields';
 import { Badge, Card, Empty, ErrorBox, Loading, PageHead } from '../components/ui';
 import { offsetWords } from '../lib/chain';
@@ -271,6 +272,7 @@ function TimingBody({ fid }: { fid: number }) {
   const st = useLoad(() => api.timing(fid, { registered_at: regIso, day1_at: day1 || undefined }), [fid, regIso, day1]);
   const [editing, setEditing] = useState<TimingMessage | null>(null);
   const [queue, setQueue] = useState<TimingMessage | null>(null);
+  const [testOpen, setTestOpen] = useState(false);
   useEffect(() => { if (st.data && !reg) setReg(toLocalInput(st.data.sample.registered_at)); }, [st.data, reg]);
 
   const groups = useMemo(() => {
@@ -313,7 +315,13 @@ function TimingBody({ fid }: { fid: number }) {
           </label>
         </div>
         <div className="small">2-kun: <b>{dayTitle(Date.parse(p.sample.day2_at))}, {fmtTime(p.sample.day2_at)}</b> · deadline: <b>{fmtDateTime(p.sample.deadline_at)}</b></div>
+        <div className="row-between">
+          <span className="small muted">Shu namuna lidga boradigan butun progrevni Telegramda ko'rish — xabarlar shu tartibda, har biri oldidan «qachon va kimga».</span>
+          <button type="button" className="btn btn-accent" onClick={() => setTestOpen(true)}>🧪 Butun progrevni testga yuborish</button>
+        </div>
       </Card>
+      <TestSendModal open={testOpen} many title="Progrev zanjiri (kunlar bo'yicha)" onClose={() => setTestOpen(false)}
+        send={(r) => api.testProgrev(fid, { ...r, registered_at: p.sample.registered_at, day1_at: p.sample.day1_at })} />
 
       <Card title="Jadval">
         {groups.timed.length === 0 ? <Empty title="Faol xabar yo'q">Xabarlarni <Link to="/chain">Progrev zanjiri</Link>da qo'shing.</Empty> : (

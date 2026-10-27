@@ -596,6 +596,15 @@ function mockTest(c: Ctx, text: string): TestResult {
   };
 }
 on('POST', '/admin/chain/:id/test', (c) => mockTest(c, findMsg(n(c.m[1]))[1].text));
+on('POST', '/admin/funnels/:id/test-progrev', (c) => {
+  const { flow_id } = b<{ flow_id?: number }>(c);
+  const all = (chain[n(c.m[1])] ?? []).filter((m) => m.status === 'active' && (flow_id ? flowNodes.some((x) => x.id === m.flow_node_id && x.flow_id === flow_id) : !m.flow_node_id));
+  if (!all.length) throw new ApiError(400, "Yuboriladigan faol xabar yo'q");
+  const r = mockTest(c, '');
+  const group = b<{ target: string }>(c).target === 'chat';
+  const eta = Math.round(all.length * 2 * (group ? 3.1 : 0.5));
+  return { ...r, count: all.length, eta_sec: eta, notes: [`${all.length} ta xabar ketma-ket yuborilmoqda — taxminan ${Math.max(1, Math.round(eta / 60))} daqiqa. Oxirida «✅ Tugadi» xabari keladi.`] };
+});
 on('GET', '/admin/test-targets', (c) => ({ me: { ready: !!c.user.tg_user_id }, chat: { ready: !!globalSettings.test_chat_id, title: globalSettings.test_chat_title } }));
 
 // ── xabarlar vaqti ──

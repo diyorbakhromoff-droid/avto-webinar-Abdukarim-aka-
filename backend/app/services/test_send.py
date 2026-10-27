@@ -3,6 +3,7 @@
 Lidlar va navbat (scheduled_messages) bilan hech qanday aloqasi yo'q: manzil faqat ikkitadan biri —
 adminning o'z Telegram ID si yoki sozlamalardagi test chati. Ixtiyoriy chat ID qabul qilinmaydi.
 """
+import asyncio
 import html
 import logging
 import re
@@ -15,13 +16,16 @@ from aiogram.exceptions import (
     TelegramUnauthorizedError,
 )
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
+from app.db import SessionLocal
 from app.domain import slots
-from app.models import AdminUser, AuditLog, Funnel, KeyValue, Lead, LeadSession
+from app.models import AdminUser, AuditLog, Funnel, KeyValue, Lead, LeadSession, Media
 from app.services.leads import active_session
 from app.services.render import Payload, fill, send_payload, variables
+from app.services.tg import get_bot
 from app.timeutil import fmt_datetime, now_utc
 
 log = logging.getLogger(__name__)
@@ -140,8 +144,8 @@ def explain(e: Exception) -> str:
         msg = e.message.lower()
         if "chat not found" in msg:
             bot = get_settings().bot_username
-            return (f"Chat topilmadi: bot (@{bot}) bu guruhda yo'q yoki ID noto'g'ri. Botni guruhga qo'shing — u guruhga "
-                    f"to'g'ri ID ni o'zi yozadi (yoki guruhda /chatid@{bot} yozing) va o'sha ID ni kiriting. "
+            return (f"Chat topilmadi: bot (@{bot}) bu guruhda yo'q yoki ID noto'g'ri. Botni guruhga qo'shing — "
+                    f"u guruhga to'g'ri ID ni o'zi yozadi (yoki guruhda /chatid@{bot} yozing) va o'sha ID ni kiriting. "
                     "Guruh superguruhga aylangan bo'lsa, ID -100 bilan boshlanadigan yangisiga o'zgaradi.")
         if "can't parse entities" in msg:
             return f"Matndagi formatlash xato (yopilmagan teg?): {e.message}"
@@ -197,6 +201,102 @@ async def send_test(bot: Bot, db: AsyncSession, me: AdminUser, *, target: str, t
     log.info("Test xabar: %s → %s (%s, %s)", title, target_label, me.name, source)
     shown = {k: html.unescape(v) for k, v in vars_.items()}
     return TestResult(target_label, now, shown, source, notes)
+
+
+# ─────────────────────────── butun progrevni ketma-ket yuborish ───────────────────────────
+
+# Telegram: bitta guruhga daqiqasiga ~20 ta xabar, shaxsiy chatga — soniyasiga ~1 ta
+GROUP_GAP = 3.1
+PRIVATE_GAP = 0.5
+_running: set[int] = set()   # shu chatga hozir yuborilayotgan progrev (ikkinchisi boshlanmaydi)
+
+
+@dataclass
+class SeqItem:
+    title: str
+    when: str          # lidga qachon boradi (oddiy tilda)
+    audience: str      # kimga
+    kind: str
+    text: str
+    media_ids: list[int]
+    buttons: list[list[dict]]
+    variables: dict[str, str]
+
+
+def sequence_eta(chat_id: int, items: list[SeqItem]) -> int:
+    return int(len(items) * 2 * (GROUP_GAP if chat_id < 0 else PRIVATE_GAP)) + 1
+
+
+def is_running(chat_id: int) -> bool:
+    return chat_id in _running
+
+
+async def _retry(call) -> None:
+    for _ in range(3):
+        try:
+            await call()
+            return
+        except TelegramRetryAfter as e:
+            await asyncio.sleep(e.retry_after + 1)
+    await call()
+
+
+async def start_sequence(db: AsyncSession, chat_id: int, label: str, count: int) -> int:
+    """Birinchi (kirish) xabari darhol yuboriladi: chat noto'g'ri yoki botga /start bosilmagan bo'lsa — admin xatoni
+    shu zahoti ko'radi. Test guruhi superguruhga aylangan bo'lsa, yangi ID ga o'tadi. Qaytaradi: chat ID."""
+    text = (f"🧪 <b>TEST · {html.escape(label, quote=False)}</b>\n{count} ta xabar — lidga boradigan tartibda. "
+            "Har biri oldidan: qachon va kimga. Lidlarga yuborilmadi.")
+    bot = get_bot()
+    try:
+        try:
+            await _retry(lambda: bot.send_message(chat_id, text, disable_notification=True))
+        except TelegramMigrateToChat as e:
+            chat_id = e.migrate_to_chat_id
+            if kv := await db.get(KeyValue, TEST_CHAT_KEY):
+                kv.value = chat_id
+            await _retry(lambda: bot.send_message(chat_id, text, disable_notification=True))
+    except Exception as e:  # noqa: BLE001
+        raise TestSendError(explain(e)) from e
+    return chat_id
+
+
+async def run_sequence(chat_id: int, label: str, items: list[SeqItem], admin_name: str) -> None:
+    """Fon vazifasi: progrev xabarlarini lidga boradigan tartibda, har biri oldidan «qachon va kimga» izohi bilan.
+    Lidlarga va navbatga tegmaydi."""
+    _running.add(chat_id)
+    gap = GROUP_GAP if chat_id < 0 else PRIVATE_GAP
+    bot = get_bot()
+    errors: list[str] = []
+    try:
+        async with SessionLocal() as db:
+            for i, it in enumerate(items, 1):
+                await asyncio.sleep(gap)
+                esc = lambda v: html.escape(v, quote=False)  # noqa: E731
+                header = f"<b>{i}/{len(items)}</b> · «{esc(it.title)}»\n⏰ {esc(it.when)}\n👥 {esc(it.audience)}"
+                media: list[Media] = []
+                if it.media_ids:
+                    by_id = {m.id: m for m in (await db.execute(
+                        select(Media).where(Media.id.in_(it.media_ids)))).scalars()}
+                    media = [by_id[x] for x in it.media_ids if x in by_id]
+                payload = Payload(it.kind, it.text, media, it.buttons)
+                markup, _ = test_keyboard(it.buttons, private=chat_id > 0)
+                try:
+                    await _retry(lambda: bot.send_message(chat_id, header, disable_notification=True))
+                    await asyncio.sleep(gap)
+                    await _retry(lambda: send_payload(bot, db, chat_id, payload, fill(it.text, it.variables), markup))
+                except Exception as e:  # noqa: BLE001 — bitta xabar xatosi qolganlarini to'xtatmaydi
+                    errors.append(f"«{it.title}»: {explain(e)}")
+                    log.warning("Progrev testi: «%s» yuborilmadi: %s", it.title, e)
+            await asyncio.sleep(gap)
+            tail = f"✅ Tugadi: {len(items) - len(errors)} / {len(items)} ta xabar."
+            if errors:
+                tail += "\n\n❌ Yuborilmadi:\n" + "\n".join(html.escape(x) for x in errors[:10])
+            await _retry(lambda: bot.send_message(chat_id, tail, disable_notification=True))
+    except Exception:  # noqa: BLE001
+        log.exception("Progrev testi to'xtadi (%s, %s)", label, admin_name)
+    finally:
+        _running.discard(chat_id)
+        log.info("Progrev testi: %s → %s (%s), xato: %s", label, chat_id, admin_name, len(errors))
 
 
 def result_out(r: TestResult) -> dict:

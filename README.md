@@ -97,6 +97,10 @@ Har qanday xabarni lidlarga ketishidan oldin tekshirish: zanjir xabari («Progre
   tushuntiradi. Guruhda Mini App tugmasi ochilmaydi (Telegram cheklovi) — shuni ogohlantiradi.
 - `{ism}`, `{efir_sanasi}`, `{efir_vaqti}`, `{deadline}`: namunaviy lid (ism o'zingiz yozasiz, efir — eng yaqin slot)
   yoki haqiqiy lidning ma'lumotlari (faqat sotuv va super admin). Noma'lum o'zgaruvchilar haqida ogohlantiradi.
+- **Butun progrevni testga yuborish**: «Xabarlar vaqti» sahifasida (kunlar bo'yicha zanjir — namuna lidga boradigan
+  vaqt tartibida) va sxemaning har bir bo'limida («Bo'limni testga yuborish» — «Boshlanish»dan chiziqlar va tugmalar
+  tartibida). Har bir xabar oldidan «N/M · nomi · ⏰ qachon · 👥 kimga» izohi keladi, oxirida «✅ Tugadi». Telegram
+  guruhga daqiqasiga ~20 ta xabar yuborishga ruxsat beradi, shuning uchun test chatida xabarlar ~3 soniyada bittadan.
 - Natija oynada: qayerga, qachon yuborildi, qaysi qiymatlar qo'yildi; xato bo'lsa — tushunarli sababi
   (botga /start bosilmagan, bot guruhda yo'q, formatlash xato, tarmoq). Har bir test audit logga yoziladi.
 
@@ -202,7 +206,7 @@ O'z domeniga o'tish: `.env` da `APP_DOMAIN`, `ADMIN_DOMAIN`, `MINIAPP_URL`, `ADM
 
 ## Nima tekshirildi va nima tekshirilmadi
 
-- Backend: 84 ta avtomatik test (PostgreSQL bilan), jumladan botning `/start` → telefon → vaqt → tarif →
+- Backend: 86 ta avtomatik test (PostgreSQL bilan), jumladan botning `/start` → telefon → vaqt → tarif →
   chek → guruhda tasdiq oqimi (Telegram so'rovlari soxta sessiyada).
 - Mini App va admin panel haqiqiy API bilan brauzerda (Playwright) ochib ko'rildi: efir sinxron boshlanadi,
   heartbeat va savollar yoziladi, admin paneldagi barcha sahifalar xatosiz yuklanadi.

@@ -5,6 +5,7 @@ import type { FlowEdge, FlowGraph, FlowImportPhase, FlowNode, FlowNodeType, Flow
 import { FlowCanvas, type CanvasApi, type Selection } from '../components/flow/FlowCanvas';
 import { Inspector } from '../components/flow/Inspector';
 import { Modal } from '../components/Modal';
+import { TestSendModal } from '../components/TestSendModal';
 import { Empty, ErrorBox, Loading, PageHead } from '../components/ui';
 import { useConfirm } from '../lib/confirm';
 import { NODE_HINT, NODE_LABEL, PALETTE } from '../lib/flow';
@@ -119,6 +120,7 @@ export function FlowBody({ fid }: { fid: number }) {
   const [ver, setVer] = useState(0);
   const [newOpen, setNewOpen] = useState(false);
   const [renameOpen, setRenameOpen] = useState(false);
+  const [testOpen, setTestOpen] = useState(false);
   const apiRef = useRef<CanvasApi | null>(null);
 
   const list = flows.data ?? [];
@@ -299,6 +301,7 @@ export function FlowBody({ fid }: { fid: number }) {
         sub={current ? `${current.name} · ${current.status === 'active' ? 'faol' : 'qoralama'}${current.updated_by ? ` · oxirgi o'zgarish: ${current.updated_by}, ${fmtDateTime(current.updated_at)}` : ''}` : ''}
         actions={current && (
           <>
+            <button type="button" className="btn" onClick={() => setTestOpen(true)} title="Bo'limdagi barcha xabarlar chiziqlar tartibida test chatiga yoki o'zingizga">🧪 Bo'limni testga yuborish</button>
             <button type="button" className="btn btn-ghost" onClick={() => setRenameOpen(true)}>Nomini o'zgartirish</button>
             <button type="button" className="btn btn-ghost btn-danger-ghost" onClick={() => void deleteFlow()}>O'chirish</button>
             <button type="button" className={current.status === 'active' ? 'btn' : 'btn btn-primary'} onClick={() => void toggleStatus()}>
@@ -391,6 +394,8 @@ export function FlowBody({ fid }: { fid: number }) {
         <NewSectionForm fid={fid} onCreated={(f) => void created(f)} onCancel={() => setNewOpen(false)} />
       </Modal>
       <RenameModal open={renameOpen} flow={current} onClose={() => setRenameOpen(false)} onSaved={() => void flows.reload()} />
+      {current && <TestSendModal open={testOpen} many title={`Sxema: ${current.name}`} onClose={() => setTestOpen(false)}
+        send={(r) => api.testProgrev(fid, { ...r, flow_id: current.id })} />}
     </>
   );
 }

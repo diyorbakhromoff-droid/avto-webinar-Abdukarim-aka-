@@ -479,6 +479,8 @@ export interface TestResult {
 // POST /api/admin/chain/{mid}/test TestRequest -> TestResult        (lead_id — faqat sotuv / super admin)
 // POST /api/admin/broadcasts/test {text, buttons, media_id, funnel_id} & TestRequest -> TestResult
 // GET  /api/admin/test-targets -> { me: { ready }, chat: { ready, title } }
+// POST /api/admin/funnels/{id}/test-progrev TestRequest & {registered_at?, day1_at?, flow_id?}
+//   -> TestResult & { count, eta_sec }   — butun zanjir (yoki sxema bo'limi) fonda ketma-ket; 409 — oldingisi tugamagan
 // GET/PUT /api/admin/settings: + test_chat_id, test_chat_title (PUT faqat yuborilgan maydonlarni o'zgartiradi;
 //   test_chat_id saqlashdan oldin bot unga yozib ko'radi)
 

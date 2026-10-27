@@ -8,7 +8,7 @@ import type {
   SettingsSaveResponse, SimulationRow, StatsResponse, TariffAdmin, UserInput, WatchStats,
   FlowConfig, FlowEdge, FlowGraph, FlowImportPhase, FlowMessage, FlowMessageInput, FlowNode, FlowNodeType, FlowSection,
   FlowTarget, PipelineCard, PipelineColumn, PipelineStage, StageInput,
-  QueueRow, TestRequest, TestResult, TestTargets, TimingInput, TimingPage,
+  QueueRow, TestRequest, TestResult, TestTargets, TimingInput, TimingPage, ProgrevTestRequest, ProgrevTestResult,
 } from './types';
 
 export interface LeadsFilter {
@@ -95,6 +95,7 @@ export const api = {
   duplicateChain: (id: number) => http.post<ChainMessage>(`/admin/chain/${id}/duplicate`),
   testChain: (id: number, body: TestRequest) => http.post<TestResult>(`/admin/chain/${id}/test`, body),
   testTargets: () => http.get<TestTargets>('/admin/test-targets'),
+  testProgrev: (fid: number, body: ProgrevTestRequest) => http.post<ProgrevTestResult>(`/admin/funnels/${fid}/test-progrev`, body),
   timing: (fid: number, sample: { registered_at?: string; day1_at?: string } = {}) =>
     http.get<TimingPage>(`/admin/funnels/${fid}/timing`, q(sample)),
   setTiming: (mid: number, body: TimingInput) =>
