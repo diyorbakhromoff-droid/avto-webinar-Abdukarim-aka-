@@ -347,20 +347,33 @@ function FlowRuns({ lead }: { lead: LeadCard }) {
   );
 }
 
-function Messages({ lead }: { lead: LeadCard }) {
+function Messages({ lead, reload }: { lead: LeadCard; reload: () => void }) {
+  const toast = useToast();
+  const confirm = useConfirm();
   if (!lead.messages.length) return null;
   const list = [...lead.messages].sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
+  const cancel = async (id: number, title: string) => {
+    if (!(await confirm({ title: 'Xabarni bekor qilish', message: `«${title}» ${lead.name} ga yuborilmaydi. Boshqa lidlarga ta'sir qilmaydi.`, confirmText: 'Bekor qilish', danger: true }))) return;
+    try {
+      await api.cancelScheduled(id);
+      toast.success('Bekor qilindi');
+      reload();
+    } catch (e) {
+      toast.error(e);
+    }
+  };
   return (
     <Card title={`Yuborilgan xabarlar · ${list.length}`}>
       <div className="table-wrap flat">
         <table className="table table-compact">
-          <thead><tr><th>Vaqt</th><th>Xabar</th><th>Holat</th></tr></thead>
+          <thead><tr><th>Vaqt</th><th>Xabar</th><th>Holat</th><th /></tr></thead>
           <tbody>
             {list.map((m, i) => (
               <tr key={i}>
                 <td className="nowrap tnum muted">{fmtDateTime(m.at)}</td>
                 <td>{m.title}</td>
                 <td><Badge tone={/fail|xato|block|error/i.test(m.status) ? 'danger' : /deliver|yetkaz|sent|yubor/i.test(m.status) ? 'success' : 'neutral'}>{m.status}</Badge></td>
+                <td className="num">{m.cancellable && m.id !== undefined && <button type="button" className="btn btn-sm btn-ghost btn-danger-ghost" onClick={() => void cancel(m.id!, m.title)}>Bekor qilish</button>}</td>
               </tr>
             ))}
           </tbody>
@@ -416,7 +429,7 @@ export default function LeadCardPage() {
               <div className="stack" style={{ flex: '3 1 420px', gap: 20 }}>
                 <Card title="Avtovoronka yo'li"><FunnelPath lead={l} /></Card>
                 <Events lead={l} />
-                <Messages lead={l} />
+                <Messages lead={l} reload={reload} />
               </div>
             </div>
             <MessageModal open={msgOpen} leadIds={[l.id]} onClose={() => setMsgOpen(false)} onSent={reload} />

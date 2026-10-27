@@ -14,6 +14,7 @@ const Funnels = lazy(() => import('./pages/Funnels'));
 const Video = lazy(() => import('./pages/Video'));
 const Slots = lazy(() => import('./pages/Slots'));
 const Chain = lazy(() => import('./pages/Chain'));
+const Timing = lazy(() => import('./pages/Timing'));
 const Sales = lazy(() => import('./pages/Sales'));
 const Comments = lazy(() => import('./pages/Comments'));
 const Leads = lazy(() => import('./pages/Leads'));
@@ -72,6 +73,7 @@ export default function App() {
                   <Route path="video" element={<Guard k="video"><Video /></Guard>} />
                   <Route path="slots" element={<Guard k="slots"><Slots /></Guard>} />
                   <Route path="chain" element={<Guard k="chain"><Chain /></Guard>} />
+                  <Route path="timing" element={<Guard k="timing"><Timing /></Guard>} />
                   <Route path="sales" element={<Guard k="sales"><Sales /></Guard>} />
                   <Route path="comments" element={<Guard k="comments"><Comments /></Guard>} />
                   <Route path="leads" element={<Guard k="leads"><Leads /></Guard>} />

@@ -8,6 +8,7 @@ import type {
   SettingsSaveResponse, SimulationRow, StatsResponse, TariffAdmin, UserInput, WatchStats,
   FlowConfig, FlowEdge, FlowGraph, FlowImportPhase, FlowMessage, FlowMessageInput, FlowNode, FlowNodeType, FlowSection,
   FlowTarget, PipelineCard, PipelineColumn, PipelineStage, StageInput,
+  QueueRow, TestRequest, TestResult, TestTargets, TimingInput, TimingPage,
 } from './types';
 
 export interface LeadsFilter {
@@ -92,7 +93,14 @@ export const api = {
   updateChain: (id: number, m: ChainMessageInput) => http.put<ChainMessage>(`/admin/chain/${id}`, m),
   deleteChain: (id: number) => http.del(`/admin/chain/${id}`),
   duplicateChain: (id: number) => http.post<ChainMessage>(`/admin/chain/${id}/duplicate`),
-  testChain: (id: number) => http.post<{ ok: true }>(`/admin/chain/${id}/test`),
+  testChain: (id: number, body: TestRequest) => http.post<TestResult>(`/admin/chain/${id}/test`, body),
+  testTargets: () => http.get<TestTargets>('/admin/test-targets'),
+  timing: (fid: number, sample: { registered_at?: string; day1_at?: string } = {}) =>
+    http.get<TimingPage>(`/admin/funnels/${fid}/timing`, q(sample)),
+  setTiming: (mid: number, body: TimingInput) =>
+    http.patch<{ ok: true; shifted: number; rule: string }>(`/admin/chain/${mid}/timing`, body),
+  chainQueue: (mid: number) => http.get<{ total: number; items: QueueRow[] }>(`/admin/chain/${mid}/queue`),
+  cancelScheduled: (sid: number) => http.post<{ ok: true }>(`/admin/scheduled/${sid}/cancel`),
   chainHistory: (id: number) => http.get<ChainHistoryEntry[]>(`/admin/chain/${id}/history`),
   simulate: (fid: number, body: { registered_at: string; day1_at: string }) =>
     http.post<SimulationRow[]>(`/admin/funnels/${fid}/chain/simulate`, body),
@@ -184,8 +192,10 @@ export const api = {
   // ── Ommaviy xabar ──
   broadcasts: (fid: number) => http.get<Broadcast[]>(`/admin/funnels/${fid}/broadcasts`),
   createBroadcast: (fid: number, b: BroadcastInput) => http.post<Broadcast>(`/admin/funnels/${fid}/broadcasts`, b),
-  testBroadcast: (b: { text: string; buttons: ChainButton[][]; media_id: number | null }) =>
-    http.post<{ ok: true }>('/admin/broadcasts/test', b),
+  rescheduleBroadcast: (id: number, send_at: string | null) => http.put<Broadcast>(`/admin/broadcasts/${id}`, { send_at }),
+  cancelBroadcast: (id: number) => http.post<Broadcast>(`/admin/broadcasts/${id}/cancel`),
+  testBroadcast: (b: { text: string; buttons: ChainButton[][]; media_id: number | null; funnel_id?: number } & TestRequest) =>
+    http.post<TestResult>('/admin/broadcasts/test', b),
 
   // ── Dashboard / statistika ──
   dashboard: (fid: number, period: DashboardPeriod) => http.get<DashboardResponse>('/admin/dashboard', { funnel_id: fid, period }),
@@ -199,7 +209,7 @@ export const api = {
 
   // ── Sozlamalar ──
   globalSettings: () => http.get<GlobalSettings>('/admin/settings'),
-  saveGlobalSettings: (s: GlobalSettings) => http.put<GlobalSettings>('/admin/settings', s),
+  saveGlobalSettings: (s: Partial<GlobalSettings>) => http.put<GlobalSettings>('/admin/settings', s),
   audit: () => http.get<AuditRow[]>('/admin/audit'),
   failedMessages: () => http.get<FailedMessage[]>('/admin/failed-messages'),
 };

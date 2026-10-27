@@ -81,6 +81,46 @@ ko'rinishi (jadval, Excel) avvalgidek qoldi, filtrlar ikkalasida bir xil.
 - Bosqich o'zgarishi lid voqealar lentasiga yoziladi («Sotuv bosqichi: Yangi → Bog'lanildi (Nodira)»).
 - Doska har daqiqada o'zi yangilanadi.
 
+## Test xabari (🧪)
+
+Har qanday xabarni lidlarga ketishidan oldin tekshirish: zanjir xabari («Progrev zanjiri» → xabar), sxemadagi
+«Xabar» bloki, «Ommaviy xabar» va lid kartasidagi «Bot orqali xabar» — hammasida «🧪 Test xabarini yuborish» tugmasi.
+
+- Faqat ikki manzil: **o'zingizning Telegramingiz** (Sozlamalar → Foydalanuvchilar → Telegram ID) yoki
+  **test chati** (Sozlamalar → «Test chati»: botni guruhga qo'shib, guruh ID sini kiritasiz; saqlashda bot guruhga
+  «✅ Test chati ulandi» deb yozadi). Ixtiyoriy chat ID qabul qilinmaydi.
+- Test lidlarga, navbatga (`scheduled_messages`) va lid voqealariga tegmaydi — alohida endpoint, alohida kod
+  (`backend/app/services/test_send.py`). Lidlarga yuborish avvalgidek zanjir yoki ommaviy xabar orqali.
+- Xabar asl holida boradi: formatlash, emoji, media, havolalar, tugmalar. Oldidan qisqa «🧪 TEST» sarlavhasi
+  alohida xabar bo'lib keladi. Tugmalar bosilsa lid uchun hech narsa sodir bo'lmaydi — bot «Lid bossa: …» deb
+  tushuntiradi. Guruhda Mini App tugmasi ochilmaydi (Telegram cheklovi) — shuni ogohlantiradi.
+- `{ism}`, `{efir_sanasi}`, `{efir_vaqti}`, `{deadline}`: namunaviy lid (ism o'zingiz yozasiz, efir — eng yaqin slot)
+  yoki haqiqiy lidning ma'lumotlari (faqat sotuv va super admin). Noma'lum o'zgaruvchilar haqida ogohlantiradi.
+- Natija oynada: qayerga, qachon yuborildi, qaysi qiymatlar qo'yildi; xato bo'lsa — tushunarli sababi
+  (botga /start bosilmagan, bot guruhda yo'q, formatlash xato, tarmoq). Har bir test audit logga yoziladi.
+
+## Xabarlar vaqti (⏰)
+
+Admin panel → «Xabarlar vaqti». Progrev zanjiridagi har bir xabar qachon ketishi, namunaviy lid uchun aniq kun va
+soat, ketma-ket xabarlar orasidagi vaqt va har bir xabarni kutayotgan lidlar soni.
+
+- «Vaqtni o'zgartirish»: qachon (ro'yxatdan keyin / **oldingi xabardan keyin** / efirdan oldin / efir boshlangach /
+  efir tugagach / deadline'dan oldin / **aniq sana va vaqtda**) va oraliq tugmalari: 5, 10, 15, 30 daqiqa, 1, 2, 3,
+  6, 12, 24 soat yoki «✍️ Boshqa vaqt». Oynada: qaysi xabar, qaysi kuni, soat necha, oldingi va keyingi xabar qancha
+  farq bilan. «Keyingi xabarlarni ham surish» belgisi — guruhdagi oraliqlar saqlanadi.
+- Aniq sana-vaqt (`at_datetime`): har bir lidga bir marta, aynan shu vaqtda; efir vaqti o'zgarsa ham o'zgarmaydi;
+  o'tib ketgan vaqtni tanlab bo'lmaydi. Shu tanlov «Progrev zanjiri» muharririda ham bor.
+- Saqlangach, navbatdagi xabarlar yangi vaqtga ko'chadi, yuborilganlari qayta yuborilmaydi. «Navbatda N ta lid» —
+  ro'yxat, har bir lid uchun alohida «Bekor qilish» (lid kartasidagi xabarlar ro'yxatida ham). Rejadagi ommaviy
+  xabarlarning vaqtini o'zgartirish va bekor qilish ham shu sahifada.
+- Har bir lidning jadvali o'zi ro'yxatdan o'tgan va tanlagan efir vaqtidan hisoblanadi; efirdan 3 soat, 1 soat,
+  30 daqiqa oldingi eslatmalar shu lidning seansiga bog'liq. Barcha vaqtlar bazada UTC da, panelda Toshkent vaqtida.
+- Kechikish himoyasi (`domain/planning.stale_reason`): server to'xtab qolib, vaqt o'tib ketgan bo'lsa — efirdan
+  oldingi eslatma efir boshlangach, «efir boshlandi» efir tugagach, deadline eslatmasi deadline'dan keyin yuborilmaydi;
+  boshqa xabarlar 6 soatdan, aniq vaqtli va ommaviy xabarlar 1 soatdan ko'p kechiksa yuborilmaydi (sababi navbatda yoziladi).
+- Qayta ishga tushganda navbat bazadan davom etadi; har bir lid+xabar uchun bitta yozuv (dedupe), shuning uchun ikki
+  marta yuborilmaydi. Yuborish, o'tkazib yuborish va xatolar worker logiga yoziladi.
+
 ## Lokal ishga tushirish
 
 Talablar: Python 3.12+, Node 22, PostgreSQL 16, Redis 7.
@@ -161,7 +201,7 @@ O'z domeniga o'tish: `.env` da `APP_DOMAIN`, `ADMIN_DOMAIN`, `MINIAPP_URL`, `ADM
 
 ## Nima tekshirildi va nima tekshirilmadi
 
-- Backend: 71 ta avtomatik test (PostgreSQL bilan), jumladan botning `/start` → telefon → vaqt → tarif →
+- Backend: 82 ta avtomatik test (PostgreSQL bilan), jumladan botning `/start` → telefon → vaqt → tarif →
   chek → guruhda tasdiq oqimi (Telegram so'rovlari soxta sessiyada).
 - Mini App va admin panel haqiqiy API bilan brauzerda (Playwright) ochib ko'rildi: efir sinxron boshlanadi,
   heartbeat va savollar yoziladi, admin paneldagi barcha sahifalar xatosiz yuklanadi.

@@ -178,7 +178,7 @@ function Global() {
   const save = async () => {
     setBusy(true);
     try {
-      const saved = await api.saveGlobalSettings({ ...g, admin_group_chat_id: chat === '' ? null : Number(chat) });
+      const saved = await api.saveGlobalSettings({ admin_group_chat_id: chat === '' ? null : Number(chat) });
       st.setData(saved);
       toast.success('Saqlandi');
     } catch (e) {
@@ -200,6 +200,46 @@ function Global() {
       </label>
       <div className="muted small">Tungi tinchlik oralig'i har bir voronkaning «Slotlar» bo'limida sozlanadi.</div>
       <div className="form-actions"><button type="button" className="btn btn-accent" disabled={!dirty || !chatOk || busy} onClick={() => void save()}>{busy ? 'Saqlanmoqda…' : 'Saqlash'}</button></div>
+    </Card>
+  );
+}
+
+/** Test xabarlari uchun guruh: saqlashda bot unga yozib ko'radi. */
+function TestChat() {
+  const toast = useToast();
+  const st = useLoad(() => api.globalSettings(), []);
+  const [v, setV] = useState('');
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { if (st.data) setV(st.data.test_chat_id === null ? '' : String(st.data.test_chat_id)); }, [st.data]);
+  if (st.error && !st.data) return <ErrorBox error={st.error} onRetry={st.reload} />;
+  if (!st.data) return <Loading />;
+  const ok = v === '' || /^-?\d{5,20}$/.test(v);
+  const saved = st.data.test_chat_id === null ? '' : String(st.data.test_chat_id);
+  const save = async () => {
+    setBusy(true);
+    try {
+      const r = await api.saveGlobalSettings({ test_chat_id: v === '' ? null : Number(v) });
+      st.setData(r);
+      toast.success(r.test_chat_id ? `Test chati ulandi: ${r.test_chat_title ?? r.test_chat_id}` : "Test chati o'chirildi");
+    } catch (e) {
+      toast.error(e);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Card title="🧪 Test chati">
+      <div className="small muted">
+        Xabarlarni lidlarga ketishidan oldin tekshirish uchun alohida Telegram guruh. Botni guruhga qo'shing va guruh ID sini kiriting —
+        saqlashda bot guruhga «✅ Test chati ulandi» deb yozadi. Lidlar bu guruhga hech qachon qo'shilmaydi.
+        Har bir admin o'z Telegramiga ham test yuborishi mumkin (Foydalanuvchilar bo'limidagi Telegram ID orqali).
+      </div>
+      <label className="field">
+        <span>Test guruhi (chat ID)</span>
+        <input className="input mono" value={v} onChange={(e) => setV(e.target.value.trim())} placeholder="-1001234567890" aria-invalid={!ok} />
+        {st.data.test_chat_id ? <span className="field-hint">Ulangan: <b>{st.data.test_chat_title ?? st.data.test_chat_id}</b></span> : <span className="field-hint">Ulanmagan</span>}
+      </label>
+      <div className="form-actions"><button type="button" className="btn btn-accent" disabled={v === saved || !ok || busy} onClick={() => void save()}>{busy ? 'Tekshirilmoqda…' : 'Saqlash va tekshirish'}</button></div>
     </Card>
   );
 }
@@ -270,7 +310,10 @@ export default function Settings() {
       <PageHead title="Sozlamalar" sub="Foydalanuvchilar, rollar, admin guruhi va tizim jurnallari." />
       <Users />
       <div className="cols">
-        <div className="col-2"><Global /></div>
+        <div className="col-2 stack">
+          <Global />
+          <TestChat />
+        </div>
         <div className="col-3"><Failed /></div>
       </div>
       <Audit />

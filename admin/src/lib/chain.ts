@@ -1,5 +1,6 @@
 import type { ChainKind, ChainMessage, ChainMessageInput, Segment, TriggerType } from '../api/types';
 import { offsetLabel } from './format';
+import { fmtDateTime, fmtDateTimeLong } from './time';
 import { KIND_SHORT, SEGMENT_SHORT, STUCK_LABEL, isMinuteSegment, isWatchSegment } from './labels';
 
 export type PhaseKey = 'reg' | 'day1' | 'between' | 'day2' | 'after' | 'other';
@@ -10,10 +11,10 @@ export const PHASES: { key: PhaseKey; title: string }[] = [
   { key: 'between', title: 'Kunlar orasi' },
   { key: 'day2', title: '2-kun' },
   { key: 'after', title: '2-kundan keyin' },
-  { key: 'other', title: "Tugma / to'xtab qolish" },
+  { key: 'other', title: "Tugma / to'xtab qolish / aniq sana" },
 ];
 
-type Msg = Pick<ChainMessage, 'trigger_type' | 'trigger_day' | 'offset_minutes' | 'stuck_step' | 'button_key' | 'sort'>;
+type Msg = Pick<ChainMessage, 'trigger_type' | 'trigger_day' | 'offset_minutes' | 'stuck_step' | 'button_key' | 'sort'> & { fixed_at?: string | null };
 type Aud = Pick<ChainMessage, 'segment' | 'segment_day' | 'segment_minute' | 'trigger_type' | 'trigger_day'>;
 
 /** Kun (1/2) talab qiladigan triggerlar. */
@@ -24,6 +25,10 @@ export function needsDay(t: TriggerType): boolean {
 export function isSpecialTrigger(t: TriggerType): boolean {
   return t === 'stuck' || t === 'on_button';
 }
+/** Aniq sana-vaqt: offset o'rniga fixed_at. */
+export function isFixedTrigger(t: TriggerType): boolean {
+  return t === 'at_datetime';
+}
 
 /** "Qachon yuboriladi?" — asosiy tanlov (oddiy tilda). */
 export const MAIN_TRIGGERS: { value: TriggerType; label: string; after: string }[] = [
@@ -33,6 +38,7 @@ export const MAIN_TRIGGERS: { value: TriggerType; label: string; after: string }
   { value: 'after_day_end', label: 'Efir tugagach … keyin', after: 'keyin' },
   { value: 'left_live', label: 'Efirdan chiqib ketganda … keyin', after: 'keyin' },
   { value: 'before_deadline', label: 'Deadline tugashidan … oldin', after: 'oldin' },
+  { value: 'at_datetime', label: 'Aniq sana va vaqtda', after: '' },
 ];
 /** Faqat «Qo'shimcha sozlamalar»da. */
 export const SPECIAL_TRIGGERS: { value: TriggerType; label: string }[] = [
@@ -43,7 +49,7 @@ export const SPECIAL_TRIGGERS: { value: TriggerType; label: string }[] = [
 /** Trigger turi almashtirilganda qo'yiladigan boshlang'ich vaqt (daqiqa). */
 export const DEFAULT_OFFSET: Record<TriggerType, number> = {
   after_registration: 60, before_day: 120, at_day_start: 0, after_day_end: 10, left_live: 3,
-  before_deadline: 180, on_button: 0, stuck: 120,
+  before_deadline: 180, on_button: 0, stuck: 120, at_datetime: 0,
 };
 
 export function phaseOf(m: Msg): PhaseKey {
@@ -69,6 +75,7 @@ export function timeKey(m: Msg, deadlineMin = 1440): number {
     case 'after_registration': return m.offset_minutes;
     case 'on_button': return 1e6;
     case 'stuck': return 2e6 + m.offset_minutes;
+    case 'at_datetime': return 3e9 + (m.fixed_at ? Date.parse(m.fixed_at) / 6e4 : 0);
   }
 }
 
@@ -88,6 +95,7 @@ export function whenLabel(m: Msg): string {
     case 'before_deadline': return `deadline'dan ${offsetLabel(o)} oldin`;
     case 'on_button': return `tugma «${m.button_key ?? '—'}»${o ? ` +${offsetLabel(o)}` : ''}`;
     case 'stuck': return `${m.stuck_step ? STUCK_LABEL[m.stuck_step].toLowerCase() : "to'xtasa"} · ${offsetLabel(o)}`;
+    case 'at_datetime': return m.fixed_at ? fmtDateTime(m.fixed_at) : 'sana tanlanmagan';
   }
 }
 
@@ -138,6 +146,7 @@ export function whenSentence(m: Msg): string {
     case 'before_deadline': return o === 0 ? 'Shaxsiy deadline tugaganda' : `Shaxsiy deadline tugashidan ${w} oldin`;
     case 'stuck': return `Lid «${m.stuck_step ? STUCK_LABEL[m.stuck_step] : '—'}» holatida ${w} to'xtab qolganda`;
     case 'on_button': return o === 0 ? `«${m.button_key || '—'}» tugmasi bosilganda` : `«${m.button_key || '—'}» tugmasi bosilgach ${w}dan keyin`;
+    case 'at_datetime': return m.fixed_at ? `${fmtDateTimeLong(m.fixed_at)} da (Toshkent vaqti)` : 'Aniq sana tanlanmagan';
   }
 }
 
@@ -182,6 +191,7 @@ export const OFFSET_LABEL: Record<TriggerType, string> = {
   before_deadline: 'Deadline tugashidan oldin',
   on_button: 'Tugma bosilgandan keyin',
   stuck: "To'xtab qolgandan keyin",
+  at_datetime: 'Aniq sana va vaqt',
 };
 
 export function textLimit(kind: ChainKind): number {
@@ -191,7 +201,7 @@ export function textLimit(kind: ChainKind): number {
 function baseInput(sort: number): ChainMessageInput {
   return {
     title: 'Yangi xabar', kind: 'text', text: '', media_ids: [], buttons: [],
-    trigger_type: 'after_registration', trigger_day: null, offset_minutes: 60,
+    trigger_type: 'after_registration', trigger_day: null, offset_minutes: 60, fixed_at: null,
     stuck_step: null, button_key: null, segment: 'all', segment_day: null, segment_minute: null,
     required: false, status: 'draft', sort,
   };
@@ -224,7 +234,7 @@ export function toInput(m: ChainMessage): ChainMessageInput {
     title: m.title, kind: m.kind, text: m.text, media_ids: [...m.media_ids],
     buttons: m.buttons.map((r) => r.map((b) => ({ ...b }))),
     trigger_type: m.trigger_type, trigger_day: m.trigger_day, offset_minutes: m.offset_minutes,
-    stuck_step: m.stuck_step, button_key: m.button_key, segment: m.segment,
+    fixed_at: m.fixed_at ?? null, stuck_step: m.stuck_step, button_key: m.button_key, segment: m.segment,
     segment_day: m.segment_day ?? null, segment_minute: m.segment_minute ?? null,
     required: m.required, status: m.status, sort: m.sort,
   };
@@ -238,6 +248,8 @@ export function normalize(m: ChainMessageInput): ChainMessageInput {
     title: m.title.trim(),
     trigger_day,
     stuck_step: m.trigger_type === 'stuck' ? (m.stuck_step ?? 'no_session') : null,
+    fixed_at: m.trigger_type === 'at_datetime' ? m.fixed_at : null,
+    offset_minutes: m.trigger_type === 'at_datetime' ? 0 : m.offset_minutes,
     button_key: m.trigger_type === 'on_button' ? (m.button_key ?? '').trim() || null : null,
     segment_day: isWatchSegment(m.segment) ? (m.segment_day ?? trigger_day ?? 1) : null,
     segment_minute: isMinuteSegment(m.segment) ? m.segment_minute : null,

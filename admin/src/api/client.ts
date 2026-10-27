@@ -161,6 +161,7 @@ export const http = {
   get: <T>(path: string, query?: Query) => request<T>('GET', path, { query }),
   post: <T>(path: string, body?: unknown, query?: Query) => request<T>('POST', path, { body: body ?? {}, query }),
   put: <T>(path: string, body?: unknown) => request<T>('PUT', path, { body: body ?? {} }),
+  patch: <T>(path: string, body?: unknown) => request<T>('PATCH', path, { body: body ?? {} }),
   del: <T = void>(path: string) => request<T>('DELETE', path),
   upload: <T>(path: string, form: FormData) => request<T>('POST', path, { form }),
 };

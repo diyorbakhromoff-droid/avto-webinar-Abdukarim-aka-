@@ -1,7 +1,7 @@
 import type { Role } from '../api/types';
 
 export type SectionKey =
-  | 'dashboard' | 'funnels' | 'video' | 'slots' | 'chain' | 'sales' | 'comments'
+  | 'dashboard' | 'funnels' | 'video' | 'slots' | 'chain' | 'timing' | 'sales' | 'comments'
   | 'leads' | 'questions' | 'chat' | 'payments' | 'broadcasts' | 'stats' | 'settings';
 
 export interface Section { key: SectionKey; path: string; label: string; roles: Role[] }
@@ -16,6 +16,7 @@ export const SECTIONS: Section[] = [
   { key: 'video', path: '/video', label: 'Webinar videosi', roles: CONTENT },
   { key: 'slots', path: '/slots', label: 'Slotlar', roles: CONTENT },
   { key: 'chain', path: '/chain', label: 'Progrev zanjiri', roles: CONTENT },
+  { key: 'timing', path: '/timing', label: 'Xabarlar vaqti', roles: CONTENT },
   { key: 'sales', path: '/sales', label: 'Sotuv bloki', roles: CONTENT },
   { key: 'comments', path: '/comments', label: 'Izohlar', roles: CONTENT },
   { key: 'leads', path: '/leads', label: 'Lidlar', roles: SALES },

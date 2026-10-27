@@ -11,9 +11,11 @@ import type {
   PaymentMethod, PaymentRow, QuestionRow, Requisites, SimulationRow, StatsResponse, TariffAdmin, WatchBucket, WatchStats,
   ChainButton, FlowConfig, FlowEdge, FlowGraph, FlowImportPhase, FlowMessage, FlowNode, FlowNodeType, FlowSection, FlowTarget,
   FunnelPathStep, PipelineCard, PipelineColumn, PipelineStage,
+  TestRequest, TestResult, TimingInput, TimingMessage, TimingPage, TriggerType,
 } from './types';
 import { NODE_LABEL, portsOf } from '../lib/flow';
 import { STAGES, STAGE_LABEL } from '../lib/pipeline';
+import { previewAt } from '../lib/timing';
 import { phaseOf } from '../lib/chain';
 import { CALL_LIST_FALLBACK, MINUTE_SEGMENTS, STEP_LABEL, WATCH_SEGMENTS } from '../lib/labels';
 import { DAY_TRIGGERS, audienceShort, whenLabel } from '../lib/chain';
@@ -136,7 +138,7 @@ function mkChain(fid: number): ChainMessage[] {
   return chainSeed.map((s, i) => ({
     id: fid * 100 + i + 1,
     title: s.title, kind: s.kind ?? 'text', text: s.text ?? '', media_ids: s.media_ids ?? [], buttons: s.buttons ?? [],
-    trigger_type: s.trigger_type, trigger_day: s.trigger_day ?? null, offset_minutes: s.offset_minutes,
+    trigger_type: s.trigger_type, trigger_day: s.trigger_day ?? null, offset_minutes: s.offset_minutes, fixed_at: null,
     stuck_step: s.stuck_step ?? null, button_key: s.button_key ?? null, segment: s.segment ?? 'all',
     segment_day: s.segment_day ?? null, segment_minute: s.segment_minute ?? null,
     required: s.required ?? false, status: s.status ?? 'active', sort: i + 1,
@@ -370,7 +372,7 @@ const adSpend: Record<number, AdSpendRow[]> = {
   2: [],
 };
 const liveResults: Record<number, LiveResults> = { 1: { day1_watch_rate: 0.41, paid_rate: 0.048, cost_per_sale: 980000 }, 2: { day1_watch_rate: null, paid_rate: null, cost_per_sale: null } };
-let globalSettings: GlobalSettings = { admin_group_chat_id: -1001987654321, bot_username: 'notiqlik_webinar_bot' };
+let globalSettings: GlobalSettings = { admin_group_chat_id: -1001987654321, bot_username: 'notiqlik_webinar_bot', test_chat_id: null, test_chat_title: null };
 const audit: AuditRow[] = [
   { at: iso(NOW - 2 * H), user: 'Kamola Yusupova', action: 'chain.update', details: '«Efirgacha 2 soat»: matn o\'zgardi' },
   { at: iso(NOW - 5 * H), user: 'Nodira Karimova', action: 'payment.approve', details: "Chek #1031 tasdiqlandi (100 000 so'm)" },
@@ -547,7 +549,7 @@ on('POST', '/admin/funnels/:id/chain', (c) => {
   need(c, 'super_admin', 'content');
   const body = b<ChainMessageInput>(c);
   validateChain(body);
-  const m: ChainMessage = { ...body, buttons: withIds(body.buttons), id: nextId(), updated_at: iso(Date.now()), updated_by: c.user.name, warnings: honestyWarnings(body.text) };
+  const m: ChainMessage = { ...body, fixed_at: body.fixed_at ?? null, buttons: withIds(body.buttons), id: nextId(), updated_at: iso(Date.now()), updated_by: c.user.name, warnings: honestyWarnings(body.text) };
   (chain[n(c.m[1])] ??= []).push(m);
   chainHistory[m.id] = [{ at: m.updated_at, user: c.user.name, changes: { title: [null, m.title] } }];
   return m;
@@ -580,9 +582,85 @@ on('POST', '/admin/chain/:id/duplicate', (c) => {
   chain[fid].push(copy);
   return copy;
 });
-on('POST', '/admin/chain/:id/test', (c) => {
-  if (!c.user.tg_user_id) throw new ApiError(400, "Profilingizda Telegram ID yo'q — Sozlamalarda kiriting");
-  findMsg(n(c.m[1]));
+function mockTest(c: Ctx, text: string): TestResult {
+  const r = b<TestRequest>(c);
+  if (r.target === 'me' && !c.user.tg_user_id) throw new ApiError(400, "Profilingizda Telegram ID yo'q. Super admin Sozlamalar → Foydalanuvchilar bo'limida ID ingizni kiritsin, keyin botga /start bosing.");
+  if (r.target === 'chat' && !globalSettings.test_chat_id) throw new ApiError(400, "Test chati sozlanmagan. Sozlamalar → «Test chati» ga guruh ID sini kiriting.");
+  const lead = r.lead_id ? leads.find((l) => l.id === r.lead_id) : null;
+  const notes = [...new Set(text.match(/\{(\w+)\}/g) ?? [])].filter((v) => !['{ism}', '{efir_sanasi}', '{efir_vaqti}', '{deadline}'].includes(v));
+  return {
+    ok: true, target: r.target === 'me' ? 'Sizning Telegramingiz' : 'Test chati', sent_at: iso(Date.now()), sent_at_label: new Date().toLocaleString('uz'),
+    variables: { ism: lead?.name ?? (r.sample_name || 'Madina'), efir_sanasi: '29-oktabr', efir_vaqti: '20:00', deadline: '31-oktabr, 22:22' },
+    data_source: lead ? `lid: ${lead.name} (#${lead.id})` : "namunaviy ma'lumot",
+    notes: notes.length ? [`Noma'lum o'zgaruvchi (lidga ham shundayligicha boradi): ${notes.join(', ')}`] : [],
+  };
+}
+on('POST', '/admin/chain/:id/test', (c) => mockTest(c, findMsg(n(c.m[1]))[1].text));
+on('GET', '/admin/test-targets', (c) => ({ me: { ready: !!c.user.tg_user_id }, chat: { ready: !!globalSettings.test_chat_id, title: globalSettings.test_chat_title } }));
+
+// ── xabarlar vaqti ──
+const RULE: Record<TriggerType, (m: ChainMessage) => string> = {
+  after_registration: (m) => `ro'yxatdan ${m.offset_minutes} daq keyin`, before_day: (m) => `${m.trigger_day}-kundan ${m.offset_minutes} daq oldin`,
+  at_day_start: (m) => `${m.trigger_day}-kun boshlanishida +${m.offset_minutes} daq`, after_day_end: (m) => `${m.trigger_day}-kun tugagach +${m.offset_minutes} daq`,
+  before_deadline: (m) => `deadline tugashidan ${m.offset_minutes} daq oldin`, left_live: (m) => `${m.trigger_day}-kun efiridan chiqib ketgach ${m.offset_minutes} daq`,
+  on_button: () => 'tugma bosilganda', stuck: (m) => `to'xtab qolganda (${m.offset_minutes} daq)`, at_datetime: (m) => `aniq vaqtda: ${m.fixed_at ? new Date(m.fixed_at).toLocaleString('uz') : '—'}`,
+};
+const queueSeed: Record<number, number> = {};
+on('GET', '/admin/funnels/:id/timing', (c): TimingPage => {
+  const fid = n(c.m[1]);
+  const s = settings[fid];
+  const reg = c.q.registered_at ? Date.parse(c.q.registered_at) : Date.now();
+  const options = slotOptions(reg, s).slice(0, 12);
+  const d1 = c.q.day1_at ? Date.parse(c.q.day1_at) : (options[0] ?? reg + D);
+  const sample = {
+    registered_at: iso(reg), day1_at: iso(d1), day2_at: iso(d1 + D), deadline_at: iso(d1 + D + s.day2_duration_sec * 1000 + s.deadline_hours * H),
+    day1_end: iso(d1 + s.day1_duration_sec * 1000), day2_end: iso(d1 + D + s.day2_duration_sec * 1000), day1_options: options.map(iso),
+  };
+  const messages = (chain[fid] ?? []).filter((m) => !m.flow_node_id).map((m): TimingMessage => {
+    const t = previewAt(m.trigger_type, m.trigger_day, m.offset_minutes, m.fixed_at, sample);
+    const event = ['stuck', 'left_live', 'on_button'].includes(m.trigger_type);
+    const late = t !== null && t < reg;
+    const pending = m.status === 'active' && !late ? (queueSeed[m.id] ??= (m.id * 7) % 23) : 0;
+    return {
+      id: m.id, title: m.title, kind: m.kind, status: m.status, trigger_type: m.trigger_type, trigger_day: m.trigger_day, offset_minutes: m.offset_minutes,
+      fixed_at: m.fixed_at, stuck_step: m.stuck_step, button_key: m.button_key, segment: m.segment, segment_label: audienceShort(m), required: m.required, sort: m.sort,
+      rule: RULE[m.trigger_type](m), planned_at: t !== null && !late ? iso(t) : null,
+      plan_status: m.status !== 'active' ? 'draft' : event ? 'event' : late ? 'skipped' : 'scheduled', plan_reason: late ? "vaqti o'tib ketgan" : null,
+      pending, next_at: pending ? iso(Date.now() + ((m.id * 37) % 300) * M) : null,
+    };
+  });
+  return { sample, quiet: { start: s.quiet_start ?? '23:00', end: s.quiet_end ?? '08:00' }, messages,
+    broadcasts: broadcasts.filter((x) => x.funnel_id === fid && x.status === 'scheduled').map((x) => ({ id: x.id, text: x.text, segment: x.segment, send_at: x.send_at })) };
+});
+on('PATCH', '/admin/chain/:id/timing', (c) => {
+  need(c, 'super_admin', 'content');
+  const [fid, m] = findMsg(n(c.m[1]));
+  const body = b<TimingInput>(c);
+  if (body.trigger_type === 'at_datetime' && (!body.fixed_at || Date.parse(body.fixed_at) < Date.now())) throw new ApiError(400, "Bu vaqt o'tib ketgan — kelajakdagi sana va vaqtni tanlang");
+  let shifted = 0;
+  if (body.shift_following && body.trigger_type === m.trigger_type && body.trigger_day === m.trigger_day) {
+    const delta = body.offset_minutes - m.offset_minutes;
+    const before = ['before_day', 'before_deadline'].includes(m.trigger_type);
+    for (const o of chain[fid]) {
+      if (o.id === m.id || o.flow_node_id || o.trigger_type !== m.trigger_type || o.trigger_day !== m.trigger_day) continue;
+      if (before ? o.offset_minutes < m.offset_minutes : o.offset_minutes > m.offset_minutes) {
+        o.offset_minutes = Math.max(0, o.offset_minutes + delta);
+        shifted++;
+      }
+    }
+  }
+  Object.assign(m, { trigger_type: body.trigger_type, trigger_day: body.trigger_day, offset_minutes: body.offset_minutes, fixed_at: body.fixed_at, updated_at: iso(Date.now()), updated_by: c.user.name });
+  return { ok: true, shifted, rule: RULE[m.trigger_type](m) };
+});
+on('GET', '/admin/chain/:id/queue', (c) => {
+  const id = n(c.m[1]);
+  const total = queueSeed[id] ?? 0;
+  const pool = leads.filter((l) => l.funnel_id === 1).slice(0, total);
+  return { total, items: pool.map((l, i) => ({ id: id * 1000 + i, lead_id: l.id, lead_name: l.name, send_at: iso(Date.now() + (i + 1) * 17 * M) })) };
+});
+on('POST', '/admin/scheduled/:id/cancel', (c) => {
+  const mid = Math.floor(n(c.m[1]) / 1000);
+  if (queueSeed[mid]) queueSeed[mid]--;
   return { ok: true };
 });
 
@@ -626,6 +704,7 @@ function addMsg(fid: number, nodeId: number, title: string, text: string, button
     id: nextId(), title, kind: 'text', text, media_ids: [], buttons: withIds(buttons), trigger_type: 'flow' as never, trigger_day: null,
     offset_minutes: 0, stuck_step: null, button_key: null, segment: 'all', segment_day: null, segment_minute: null,
     required: false, status: 'active', sort: 0, flow_node_id: nodeId, updated_at: iso(Date.now()), updated_by: 'Demo', ...extra,
+    fixed_at: extra.fixed_at ?? null,
   });
 }
 const link = (flowId: number, a: StoredNode, port: string, z: StoredNode, item = 0) =>
@@ -1224,9 +1303,22 @@ on('POST', '/admin/funnels/:id/broadcasts', (c) => {
   void _f;
   return out;
 });
-on('POST', '/admin/broadcasts/test', (c) => {
-  if (!c.user.tg_user_id) throw new ApiError(400, "Profilingizda Telegram ID yo'q");
-  return { ok: true };
+on('POST', '/admin/broadcasts/test', (c) => mockTest(c, b<{ text: string }>(c).text));
+on('PUT', '/admin/broadcasts/:id', (c) => {
+  const bc = broadcasts.find((x) => x.id === n(c.m[1])) ?? notFound();
+  const { send_at } = b<{ send_at: string | null }>(c);
+  if (send_at && Date.parse(send_at) < Date.now()) throw new ApiError(400, "Bu vaqt o'tib ketgan — kelajakdagi vaqtni tanlang");
+  bc.send_at = send_at;
+  const { funnel_id: _f, ...out } = bc;
+  void _f;
+  return out;
+});
+on('POST', '/admin/broadcasts/:id/cancel', (c) => {
+  const bc = broadcasts.find((x) => x.id === n(c.m[1])) ?? notFound();
+  bc.status = 'cancelled';
+  const { funnel_id: _f, ...out } = bc;
+  void _f;
+  return out;
 });
 
 // dashboard
@@ -1404,7 +1496,9 @@ on('PUT', '/admin/funnels/:id/live-results', (c) => (liveResults[n(c.m[1])] = b<
 on('GET', '/admin/settings', (c) => (need(c, 'super_admin'), globalSettings));
 on('PUT', '/admin/settings', (c) => {
   need(c, 'super_admin');
-  globalSettings = b<GlobalSettings>(c);
+  const patch = b<Partial<GlobalSettings>>(c);
+  if ('test_chat_id' in patch) patch.test_chat_title = patch.test_chat_id ? 'Sotuv test guruhi' : null;
+  globalSettings = { ...globalSettings, ...patch };
   audited(c, 'settings.update', `admin guruhi: ${globalSettings.admin_group_chat_id ?? '—'}`);
   return globalSettings;
 });

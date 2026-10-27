@@ -13,6 +13,7 @@ import { UNIT_LABEL, UNIT_MIN, num, splitOffset, type OffsetUnit } from '../../l
 import { options } from '../../lib/labels';
 import { useToast } from '../../lib/toast';
 import { cleanButtons } from '../ButtonsEditor';
+import { TestSendModal } from '../TestSendModal';
 import { ChainItems } from './ChainItems';
 import { MessageFields, contentError, type MessageContent } from './MessageFields';
 
@@ -192,7 +193,7 @@ export function Inspector(props: Props) {
         await api.updateFlowMessage(msg.id, {
           title: title.trim() || 'Xabar', kind: content.kind, text: content.text, media_ids: content.media_ids,
           buttons: cleanButtons(content.buttons), trigger_type: 'flow', trigger_day: null, offset_minutes: 0,
-          stuck_step: null, button_key: null, segment: 'all', segment_day: null, segment_minute: null,
+          fixed_at: null, stuck_step: null, button_key: null, segment: 'all', segment_day: null, segment_minute: null,
           required: false, status: 'active', sort: 0,
         });
       }
@@ -211,18 +212,14 @@ export function Inspector(props: Props) {
     onClose();
   };
 
-  const test = async () => {
+  const [testOpen, setTestOpen] = useState(false);
+  const test = () => {
     if (!msg) return;
     if (dirty) {
       toast.info('Avval saqlang — test oxirgi saqlangan variantni yuboradi');
       return;
     }
-    try {
-      await api.testChain(msg.id);
-      toast.success('Test xabar Telegramingizga yuborildi');
-    } catch (e) {
-      toast.error(e);
-    }
+    setTestOpen(true);
   };
 
   const target = targets.find((t) => t.id === cfg.target_node_id);
@@ -457,12 +454,13 @@ export function Inspector(props: Props) {
         <div className="row">
           <button type="button" className="btn btn-ghost btn-danger-ghost" onClick={() => props.onDelete(node)} disabled={busy}>O'chirish</button>
           <button type="button" className="btn btn-ghost" onClick={() => props.onDuplicate(node)} disabled={busy}>Nusxa</button>
-          {msg && <button type="button" className="btn btn-ghost" onClick={() => void test()} disabled={busy}>Menga test</button>}
+          {msg && <button type="button" className="btn btn-ghost" onClick={test} disabled={busy}>🧪 Test</button>}
         </div>
         {node.type !== 'chain' || dirty ? (
           <button type="button" className="btn btn-accent" onClick={() => void save()} disabled={busy || !dirty}>{busy ? 'Saqlanmoqda…' : 'Saqlash'}</button>
         ) : null}
       </div>
+      {msg && <TestSendModal open={testOpen} title={node.title || 'Xabar'} onClose={() => setTestOpen(false)} send={(r) => api.testChain(msg.id, r)} />}
     </aside>
   );
 }

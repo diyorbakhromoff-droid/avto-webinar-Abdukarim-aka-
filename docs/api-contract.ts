@@ -468,6 +468,30 @@ export interface PipelineCard {
 //   -> { stages: { key: PipelineStage; label: string; count: number; sum: number; items: PipelineCard[] }[] }  (har ustunda 30 tadan)
 // GET  /api/admin/pipeline?funnel_id&<filtrlar>&stage&offset -> { items: PipelineCard[] }   (ustunning keyingi kartalari)
 // POST /api/admin/leads/{id}/stage {stage, callback_at?, note?} -> { ok, stage }
+
+// ── Test xabari: faqat adminning o'ziga yoki test chatiga (lidlar va navbatga tegmaydi) ──
+export type TestTarget = 'me' | 'chat';
+export interface TestRequest { target: TestTarget; lead_id?: number | null; sample_name?: string }
+export interface TestResult {
+  ok: true; target: string; sent_at: string; sent_at_label: string;
+  variables: Record<string, string>; data_source: string; notes: string[];
+}
+// POST /api/admin/chain/{mid}/test TestRequest -> TestResult        (lead_id — faqat sotuv / super admin)
+// POST /api/admin/broadcasts/test {text, buttons, media_id, funnel_id} & TestRequest -> TestResult
+// GET  /api/admin/test-targets -> { me: { ready }, chat: { ready, title } }
+// GET/PUT /api/admin/settings: + test_chat_id, test_chat_title (PUT faqat yuborilgan maydonlarni o'zgartiradi;
+//   test_chat_id saqlashdan oldin bot unga yozib ko'radi)
+
+// ── Xabarlar vaqti ──
+// ChainMessage: trigger_type 'at_datetime' + fixed_at (ISO) — aniq sana va vaqtda, har bir lidga bir marta
+// GET   /api/admin/funnels/{id}/timing?registered_at&day1_at -> TimingPage (namunaviy lid uchun aniq vaqtlar,
+//         navbatdagilar soni, rejadagi ommaviy xabarlar)
+// PATCH /api/admin/chain/{mid}/timing {trigger_type, trigger_day, offset_minutes, fixed_at, shift_following}
+//         -> { ok, shifted, rule }
+// GET   /api/admin/chain/{mid}/queue -> { total, items: { id, lead_id, lead_name, send_at }[] }
+// POST  /api/admin/scheduled/{sid}/cancel -> { ok }          (bitta lidning bitta xabari; sxema xabarlari emas)
+// PUT   /api/admin/broadcasts/{id} {send_at} ; POST /api/admin/broadcasts/{id}/cancel
+//         Broadcast.status: scheduled | sending | done | cancelled | expired (server to'xtab, vaqti o'tib ketgan)
 //   callback — vaqt majburiy (qo'ng'iroq eslatmasi yoziladi); lost — note bo'lsa sabab sifatida yoziladi
 /** Lidning sxemadagi yo'llari (oxirgi 20 tasi). */
 export interface LeadFlowRun {

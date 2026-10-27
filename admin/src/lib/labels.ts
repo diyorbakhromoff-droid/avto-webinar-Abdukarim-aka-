@@ -33,6 +33,7 @@ export const TRIGGER_LABEL: Record<TriggerType, string> = {
   before_deadline: 'Deadline tugashidan X oldin',
   on_button: 'Tugma bosilganda',
   stuck: "Lid biror qadamda to'xtab qolganda",
+  at_datetime: 'Aniq sana va vaqtda',
 };
 
 /**

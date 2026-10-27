@@ -1,17 +1,21 @@
 import { useState } from 'react';
 import { api } from '../api/admin';
 import type { ChainButton, MediaInfo } from '../api/types';
+import { useFunnel } from '../lib/funnel';
 import { useToast } from '../lib/toast';
 import { visibleLength } from '../lib/telegramHtml';
 import { ButtonsEditor, cleanButtons, validateButtons } from './ButtonsEditor';
 import { Modal } from './Modal';
 import { TelegramPreview } from './TelegramPreview';
+import { TestSendModal } from './TestSendModal';
 import { TextEditor } from './TextEditor';
 import { fileSize } from '../lib/format';
 
 /** Tanlangan lidlarga bot orqali xabar (POST /api/admin/leads/message). */
 export function MessageModal({ open, leadIds, onClose, onSent }: { open: boolean; leadIds: number[]; onClose: () => void; onSent?: (queued: number) => void }) {
   const toast = useToast();
+  const { funnel } = useFunnel();
+  const [testOpen, setTestOpen] = useState(false);
   const [text, setText] = useState('');
   const [buttons, setButtons] = useState<ChainButton[][]>([]);
   const [media, setMedia] = useState<MediaInfo | null>(null);
@@ -65,6 +69,7 @@ export function MessageModal({ open, leadIds, onClose, onSent }: { open: boolean
       footer={
         <>
           <button type="button" className="btn" onClick={onClose}>Bekor qilish</button>
+          <button type="button" className="btn" disabled={!canSend} onClick={() => setTestOpen(true)}>🧪 Test</button>
           <button type="button" className="btn btn-accent" disabled={!canSend} onClick={() => void send()}>{busy ? 'Yuborilmoqda…' : 'Yuborish'}</button>
         </>
       }
@@ -98,6 +103,8 @@ export function MessageModal({ open, leadIds, onClose, onSent }: { open: boolean
           <TelegramPreview kind={kind} text={text} buttons={buttons} media={media ? [media] : []} />
         </div>
       </div>
+      <TestSendModal open={testOpen} title="Lidga xabar" onClose={() => setTestOpen(false)}
+        send={(r) => api.testBroadcast({ text, buttons: cleanButtons(buttons), media_id: media?.id ?? null, funnel_id: funnel?.id, ...r, lead_id: r.lead_id ?? (leadIds.length === 1 ? leadIds[0] : null) })} />
     </Modal>
   );
 }

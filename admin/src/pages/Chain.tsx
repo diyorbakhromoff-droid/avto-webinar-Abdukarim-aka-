@@ -10,6 +10,7 @@ import { MediaPicker } from '../components/MediaPicker';
 import { Modal } from '../components/Modal';
 import { NeedFunnel } from '../components/NeedFunnel';
 import { TelegramPreview } from '../components/TelegramPreview';
+import { TestSendModal } from '../components/TestSendModal';
 import { TextEditor } from '../components/TextEditor';
 import { FlowBody } from './Flow';
 import { WatchStatsPanel } from '../components/WatchStatsPanel';
@@ -27,7 +28,7 @@ import {
 } from '../lib/labels';
 import { slotOptions } from '../lib/slots';
 import { visibleLength } from '../lib/telegramHtml';
-import { dayLabel, fmtDateTime, fmtTime, fromLocalInput, toLocalInput } from '../lib/time';
+import { dayLabel, fmtDateTime, fmtDateTimeLong, fmtTime, fromLocalInput, toLocalInput } from '../lib/time';
 import { useToast } from '../lib/toast';
 import { useLoad } from '../lib/useLoad';
 
@@ -142,6 +143,7 @@ function validate(m: ChainMessageInput, settings?: FunnelSettings): string[] {
   if (m.kind === 'album' && m.buttons.length > 0) errs.push("Albomga tugma qo'shib bo'lmaydi (Telegram cheklovi).");
   if (m.trigger_type === 'on_button' && !(m.button_key ?? '').trim()) errs.push('Tugma kalitini kiriting.');
   if (m.offset_minutes < 0) errs.push("Vaqt manfiy bo'lmasin.");
+  if (m.trigger_type === 'at_datetime' && !m.fixed_at) errs.push('Yuborish sanasi va vaqtini tanlang.');
   if (isMinuteSegment(m.segment)) {
     const d = segmentDayOf(m);
     const dur = videoMinutes(settings, d);
@@ -168,6 +170,7 @@ function WhenPicker({ form, patch, settings, onOpenAdvanced }: { form: ChainMess
       stuck_step: null,
       button_key: null,
       offset_minutes: next === t ? form.offset_minutes : DEFAULT_OFFSET[next],
+      fixed_at: next === 'at_datetime' ? form.fixed_at : null,
       segment_day: followSegDay(form, day),
     });
   };
@@ -178,6 +181,12 @@ function WhenPicker({ form, patch, settings, onOpenAdvanced }: { form: ChainMess
   if (t === 'before_deadline') hint = `Deadline — 2-kun efiri tugagach ${settings?.deadline_hours ?? 'D'} soat (lid kartasida uzaytirilsa, xabar ham suriladi).`;
   if (t === 'at_day_start') hint = '0 — efir boshlanishi bilan.';
   if (t === 'after_registration') hint = "0 — ro'yxatdan o'tishi bilan darhol.";
+  if (t === 'at_datetime') {
+    hint = form.fixed_at
+      ? `${fmtDateTimeLong(form.fixed_at)} (Toshkent vaqti). Har bir lidga bir marta, aynan shu vaqtda — efir vaqti o'zgarsa ham. Bu vaqtdan keyin ro'yxatdan o'tganlarga bormaydi.`
+        + (Date.parse(form.fixed_at) < Date.now() ? " Diqqat: bu vaqt o'tib ketgan." : '')
+      : 'Sana va vaqtni tanlang (Toshkent vaqti).';
+  }
 
   return (
     <fieldset className="picker">
@@ -189,7 +198,8 @@ function WhenPicker({ form, patch, settings, onOpenAdvanced }: { form: ChainMess
           {MAIN_TRIGGERS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
           {special && <option value="special">{TRIGGER_LABEL[t]} (qo'shimcha sozlamalarda)</option>}
         </select>
-        {!special && main && <OffsetInput minutes={form.offset_minutes} onChange={(m) => patch({ offset_minutes: m })} ariaLabel="Qancha vaqt" after={main.after} />}
+        {!special && main && t !== 'at_datetime' && <OffsetInput minutes={form.offset_minutes} onChange={(m) => patch({ offset_minutes: m })} ariaLabel="Qancha vaqt" after={main.after} />}
+        {t === 'at_datetime' && <input className="input" type="datetime-local" aria-label="Yuborish sanasi va vaqti" style={{ maxWidth: 240 }} value={toLocalInput(form.fixed_at)} onChange={(e) => patch({ fixed_at: fromLocalInput(e.target.value) })} />}
         {!special && needsDay(t) && <DayToggle value={form.trigger_day ?? 1} onChange={setDay} label="Qaysi kun efiri" />}
       </div>
       {special ? (
@@ -345,13 +355,14 @@ function AdvancedSection({ open, onToggle, form, patch }: { open: boolean; onTog
 
 const FIELD_LABEL: Record<string, string> = {
   title: 'Nomi', kind: 'Turi', text: 'Matn', media_ids: 'Media', buttons: 'Tugmalar', trigger_type: 'Qachon', trigger_day: 'Kun',
-  offset_minutes: 'Vaqt (daq)', stuck_step: 'Qadam', button_key: 'Tugma kaliti', segment: 'Kimga', segment_day: 'Video kuni',
+  offset_minutes: 'Vaqt (daq)', fixed_at: 'Aniq vaqt', stuck_step: 'Qadam', button_key: 'Tugma kaliti', segment: 'Kimga', segment_day: 'Video kuni',
   segment_minute: 'Video daqiqasi', required: 'Majburiy', status: 'Holat', sort: 'Tartib',
 };
 
 function fmtVal(key: string, v: unknown): string {
   if (v === null || v === undefined || v === '') return '—';
   if (key === 'trigger_type' && typeof v === 'string') return TRIGGER_LABEL[v as TriggerType] ?? v;
+  if (key === 'fixed_at' && typeof v === 'string') return fmtDateTime(v);
   if (key === 'segment' && typeof v === 'string') return SEGMENT_LABEL[v as Segment] ?? v;
   if (key === 'status') return v === 'active' ? 'faol' : 'qoralama';
   if (typeof v === 'boolean') return v ? 'ha' : "yo'q";
@@ -622,21 +633,14 @@ function ChainBody({ fid }: { fid: number }) {
     void save({ status: next });
   };
 
-  const test = async () => {
+  const [testOpen, setTestOpen] = useState(false);
+  const test = () => {
     if (!current) return;
     if (dirty) {
       toast.info('Avval saqlang — test oxirgi saqlangan variantni yuboradi');
       return;
     }
-    setBusy('test');
-    try {
-      await api.testChain(current.id);
-      toast.success("Test xabar Telegramingizga yuborildi");
-    } catch (e) {
-      toast.error(e);
-    } finally {
-      setBusy(null);
-    }
+    setTestOpen(true);
   };
 
   const duplicate = async () => {
@@ -845,7 +849,7 @@ function ChainBody({ fid }: { fid: number }) {
                 <button type="button" className="btn btn-ghost btn-danger-ghost" onClick={() => void remove()} disabled={!!busy}>{sel?.id === 'new' ? 'Bekor qilish' : "O'chirish"}</button>
               </div>
               <div className="row-end">
-                {current && <button type="button" className="btn" onClick={() => void test()} disabled={!!busy}>{busy === 'test' ? 'Yuborilmoqda…' : 'Menga test yuborish'}</button>}
+                {current && <button type="button" className="btn" onClick={test} disabled={!!busy}>🧪 Test xabarini yuborish</button>}
                 <button type="button" className="btn" onClick={toggleStatus} disabled={!!busy}>{form.status === 'active' ? 'Qoralama qilish' : 'Faollashtirish'}</button>
                 <button type="button" className="btn btn-accent" onClick={() => void save()} disabled={!!busy || (!dirty && sel?.id !== 'new')}>{busy === 'save' ? 'Saqlanmoqda…' : 'Saqlash'}</button>
               </div>
@@ -858,6 +862,7 @@ function ChainBody({ fid }: { fid: number }) {
             <div className="muted small">Namuna qiymatlar: {'{ism}'} = Madina, {'{efir_sanasi}'} = 23-oktabr, {'{efir_vaqti}'} = 20:00.</div>
             {sim && <SimSummary sim={sim} />}
           </section>
+          {current && <TestSendModal open={testOpen} title={current.title} onClose={() => setTestOpen(false)} send={(r) => api.testChain(current.id, r)} />}
         </div>
       )}
 

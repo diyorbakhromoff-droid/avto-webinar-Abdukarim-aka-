@@ -76,7 +76,8 @@ export type TriggerType =
   | 'left_live'          // efir davomida chiqib ketgandan X keyin (trigger_day — qaysi kun; qaytsa bekor bo'ladi)
   | 'before_deadline'    // shaxsiy deadline tugashidan X oldin
   | 'on_button'
-  | 'stuck';
+  | 'stuck'
+  | 'at_datetime';       // aniq sana va vaqtda (fixed_at), har bir lidga bir marta
 export type Segment =
   | 'all'
   // video ko'rish bo'yicha — segment_day (1|2) kerak, *_min uchun segment_minute ham
@@ -105,6 +106,8 @@ export interface ChainMessage {
   trigger_type: TriggerType;
   trigger_day: 1 | 2 | null;
   offset_minutes: number;
+  /** at_datetime: aniq yuborish vaqti (ISO) */
+  fixed_at: string | null;
   stuck_step: StuckStep | null;
   button_key: string | null;
   segment: Segment;
@@ -184,7 +187,7 @@ export interface LeadCard extends LeadRow {
   payments: PaymentRow[];
   contacts: { at: string; manager: string; result: ContactResult; callback_at: string | null; note: string }[];
   events: LeadEvent[];
-  messages: { at: string; title: string; status: string }[];
+  messages: { id?: number; at: string; title: string; status: string; cancellable?: boolean }[];
   tags?: string[];
   flow_runs?: LeadFlowRun[];
   stage_at: string;
@@ -283,7 +286,9 @@ export interface QuestionRow { id: number; lead_id: number; lead_name: string; t
 // POST /api/admin/questions/{id}/answer {text}
 
 // ── Ommaviy xabar ──
-export interface Broadcast { id: number; segment: Segment | 'cold'; text: string; buttons: ChainButton[][]; media_id: number | null; send_at: string | null; status: 'scheduled' | 'sending' | 'done'; recipients: number; created_at: string }
+export interface Broadcast { id: number; segment: Segment | 'cold'; text: string; buttons: ChainButton[][]; media_id: number | null; send_at: string | null; status: 'scheduled' | 'sending' | 'done' | 'cancelled' | 'expired'; recipients: number; created_at: string }
+// PUT  /api/admin/broadcasts/{id} {send_at: string | null} -> Broadcast   (faqat «scheduled»)
+// POST /api/admin/broadcasts/{id}/cancel -> Broadcast
 // GET  /api/admin/funnels/{id}/broadcasts -> Broadcast[]
 // POST /api/admin/funnels/{id}/broadcasts {segment, text, buttons, media_id, send_at} -> Broadcast
 // POST /api/admin/broadcasts/test {text, buttons, media_id} -> {ok:true}
@@ -310,7 +315,57 @@ export interface StatsResponse {
 // GET/PUT  /api/admin/funnels/{id}/live-results  { day1_watch_rate, paid_rate, cost_per_sale }
 
 // ── Sozlamalar ──
-export interface GlobalSettings { admin_group_chat_id: number | null; bot_username: string }
+export interface GlobalSettings {
+  admin_group_chat_id: number | null; bot_username: string;
+  /** test xabarlari uchun guruh (saqlashda bot unga yozib ko'radi) */
+  test_chat_id: number | null; test_chat_title: string | null;
+}
+
+// ── Test xabari: faqat adminning o'ziga yoki test chatiga (lidlarga va navbatga tegmaydi) ──
+export type TestTarget = 'me' | 'chat';
+export interface TestRequest { target: TestTarget; lead_id?: number | null; sample_name?: string }
+export interface TestResult {
+  ok: true; target: string; sent_at: string; sent_at_label: string;
+  variables: Record<string, string>; data_source: string; notes: string[];
+}
+export interface TestTargets { me: { ready: boolean }; chat: { ready: boolean; title: string | null } }
+// POST /api/admin/chain/{mid}/test TestRequest -> TestResult
+// POST /api/admin/broadcasts/test {text, buttons, media_id, funnel_id} & TestRequest -> TestResult
+// GET  /api/admin/test-targets -> TestTargets
+
+// ── Xabarlar vaqti ──
+export interface TimingMessage {
+  id: number; title: string; kind: ChainKind; status: 'active' | 'draft';
+  trigger_type: TriggerType; trigger_day: 1 | 2 | null; offset_minutes: number; fixed_at: string | null;
+  stuck_step: StuckStep | null; button_key: string | null; segment: Segment; segment_label: string;
+  required: boolean; sort: number;
+  /** vaqt qoidasi oddiy tilda */
+  rule: string;
+  /** namunaviy lid uchun aniq yuborish vaqti */
+  planned_at: string | null;
+  plan_status: 'scheduled' | 'compressed' | 'quiet_shifted' | 'skipped' | 'event' | 'draft';
+  plan_reason: string | null;
+  /** navbatda kutayotgan lidlar soni va eng yaqin yuborish */
+  pending: number; next_at: string | null;
+}
+export interface TimingPage {
+  sample: {
+    registered_at: string; day1_at: string; day2_at: string; deadline_at: string;
+    day1_end: string; day2_end: string; day1_options: string[];
+  };
+  quiet: { start: string; end: string };
+  messages: TimingMessage[];
+  broadcasts: { id: number; text: string; segment: Segment | 'cold'; send_at: string | null }[];
+}
+export interface TimingInput {
+  trigger_type: TriggerType; trigger_day: 1 | 2 | null; offset_minutes: number; fixed_at: string | null;
+  shift_following: boolean;
+}
+export interface QueueRow { id: number; lead_id: number; lead_name: string; send_at: string }
+// GET   /api/admin/funnels/{id}/timing?registered_at&day1_at -> TimingPage
+// PATCH /api/admin/chain/{mid}/timing TimingInput -> { ok, shifted, rule }
+// GET   /api/admin/chain/{mid}/queue -> { total, items: QueueRow[] }
+// POST  /api/admin/scheduled/{sid}/cancel -> { ok }
 // GET/PUT /api/admin/settings
 // GET /api/admin/audit -> AuditRow[]
 // GET /api/admin/failed-messages -> FailedMessage[]

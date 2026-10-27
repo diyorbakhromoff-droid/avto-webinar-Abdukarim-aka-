@@ -23,7 +23,7 @@ const DAY_TRIGGERS = new Set<TriggerType>(['before_day', 'at_day_start', 'after_
 function blank(sort: number): ChainMessageInput {
   return {
     title: 'Yangi xabar', kind: 'text', text: '', media_ids: [], buttons: [],
-    trigger_type: 'after_registration', trigger_day: null, offset_minutes: 60,
+    trigger_type: 'after_registration', trigger_day: null, offset_minutes: 60, fixed_at: null,
     stuck_step: null, button_key: null, segment: 'all', segment_day: null, segment_minute: null,
     required: false, status: 'active', sort,
   };

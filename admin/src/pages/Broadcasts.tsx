@@ -4,6 +4,7 @@ import type { Broadcast, ChainButton, MediaInfo, Segment } from '../api/types';
 import { ButtonsEditor, cleanButtons, validateButtons } from '../components/ButtonsEditor';
 import { NeedFunnel } from '../components/NeedFunnel';
 import { TelegramPreview } from '../components/TelegramPreview';
+import { TestSendModal } from '../components/TestSendModal';
 import { TextEditor } from '../components/TextEditor';
 import { Badge, Card, Empty, ErrorBox, Loading, PageHead, Segmented, type Tone } from '../components/ui';
 import { useConfirm } from '../lib/confirm';
@@ -19,6 +20,8 @@ const STATUS: Record<Broadcast['status'], [string, Tone]> = {
   scheduled: ['rejada', 'info'],
   sending: ['yuborilmoqda', 'warn'],
   done: ['yuborildi', 'success'],
+  cancelled: ['bekor qilindi', 'neutral'],
+  expired: ["o'tkazib yuborildi", 'danger'],
 };
 
 function BroadcastsBody({ fid }: { fid: number }) {
@@ -59,15 +62,18 @@ function BroadcastsBody({ fid }: { fid: number }) {
 
   const payload = () => ({ text, buttons: cleanButtons(buttons), media_id: media?.id ?? null });
 
-  const test = async () => {
-    setBusy('test');
+  const [testOpen, setTestOpen] = useState(false);
+  const test = () => setTestOpen(true);
+
+  const cancelOne = async (b: Broadcast) => {
+    const ok = await confirm({ title: 'Ommaviy xabarni bekor qilish', message: b.status === 'sending' ? "Hali yuborilmagan lidlarga bormaydi." : `${b.send_at ? fmtDateTime(b.send_at) : ''} dagi xabar yuborilmaydi.`, confirmText: 'Bekor qilish', danger: true });
+    if (!ok) return;
     try {
-      await api.testBroadcast(payload());
-      toast.success('Test xabar Telegramingizga yuborildi');
+      const nb = await api.cancelBroadcast(b.id);
+      list.setData((l) => (l ?? []).map((x) => x.id === nb.id ? nb : x));
+      toast.success('Bekor qilindi');
     } catch (e) {
       toast.error(e);
-    } finally {
-      setBusy(null);
     }
   };
 
@@ -145,7 +151,7 @@ function BroadcastsBody({ fid }: { fid: number }) {
           </div>
           {errs.length > 0 && text && <div className="small text-danger">{errs[0]}</div>}
           <div className="form-actions">
-            <button type="button" className="btn" disabled={!!busy || !text.trim() || !!btnErr} onClick={() => void test()}>{busy === 'test' ? 'Yuborilmoqda…' : 'Test yuborish'}</button>
+            <button type="button" className="btn" disabled={!!busy || !text.trim() || !!btnErr} onClick={test}>🧪 Test xabarini yuborish</button>
             <button type="button" className="btn btn-accent" disabled={!!busy || errs.length > 0} onClick={() => void send()}>{busy === 'send' ? 'Kuting…' : mode === 'now' ? 'Yuborish' : "Rejaga qo'yish"}</button>
           </div>
         </Card>
@@ -155,13 +161,16 @@ function BroadcastsBody({ fid }: { fid: number }) {
         </div>
       </div>
 
+      <TestSendModal open={testOpen} title="Ommaviy xabar" onClose={() => setTestOpen(false)}
+        send={(r) => api.testBroadcast({ ...payload(), funnel_id: fid, ...r })} />
+
       <Card title="Yuborilgan va rejadagi xabarlar">
         {list.error && !list.data ? <ErrorBox error={list.error} onRetry={list.reload} /> : !list.data ? <Loading /> : past.length === 0 ? (
           <Empty title="Hali ommaviy xabar yuborilmagan" />
         ) : (
           <div className="table-wrap flat">
             <table className="table">
-              <thead><tr><th>Yaratilgan</th><th>Segment</th><th>Matn</th><th>Yuborish</th><th className="num">Qabul qiluvchi</th><th>Holat</th></tr></thead>
+              <thead><tr><th>Yaratilgan</th><th>Segment</th><th>Matn</th><th>Yuborish</th><th className="num">Qabul qiluvchi</th><th>Holat</th><th /></tr></thead>
               <tbody>
                 {past.map((b) => (
                   <tr key={b.id}>
@@ -171,6 +180,7 @@ function BroadcastsBody({ fid }: { fid: number }) {
                     <td className="nowrap">{b.send_at ? fmtDateTime(b.send_at) : 'darhol'}</td>
                     <td className="num">{num(b.recipients)}</td>
                     <td><Badge tone={STATUS[b.status][1]}>{STATUS[b.status][0]}</Badge></td>
+                    <td className="nowrap">{(b.status === 'scheduled' || b.status === 'sending') && <button type="button" className="btn btn-sm btn-ghost btn-danger-ghost" onClick={() => void cancelOne(b)}>Bekor qilish</button>}</td>
                   </tr>
                 ))}
               </tbody>
