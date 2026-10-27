@@ -230,10 +230,14 @@ function TestChat() {
   return (
     <Card title="🧪 Test chati">
       <div className="small muted">
-        Xabarlarni lidlarga ketishidan oldin tekshirish uchun alohida Telegram guruh. Botni guruhga qo'shing va guruh ID sini kiriting —
-        saqlashda bot guruhga «✅ Test chati ulandi» deb yozadi. Lidlar bu guruhga hech qachon qo'shilmaydi.
+        Xabarlarni lidlarga ketishidan oldin tekshirish uchun alohida Telegram guruh. Lidlar bu guruhga hech qachon qo'shilmaydi.
         Har bir admin o'z Telegramiga ham test yuborishi mumkin (Foydalanuvchilar bo'limidagi Telegram ID orqali).
       </div>
+      <ol className="plain-list small">
+        <li>Botni (@{st.data.bot_username}) guruhga qo'shing — bot guruhga uning ID sini o'zi yozadi.
+          Yozmasa, guruhda <code>/chatid@{st.data.bot_username}</code> yuboring.</li>
+        <li>O'sha ID ni shu yerga kiritib, «Saqlash va tekshirish» ni bosing — bot guruhga «✅ Test chati ulandi» deb yozadi.</li>
+      </ol>
       <label className="field">
         <span>Test guruhi (chat ID)</span>
         <input className="input mono" value={v} onChange={(e) => setV(e.target.value.trim())} placeholder="-1001234567890" aria-invalid={!ok} />

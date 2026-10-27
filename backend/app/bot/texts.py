@@ -69,6 +69,9 @@ GROUP_RECEIPT = ("<b>Yangi chek #{id}</b>\nLid: {name}\nTelefon: {phone}\nTarif:
 GROUP_DUP = "\n\n⚠️ Diqqat: bu fayl #{dup} chekda ham yuborilgan"
 GROUP_APPROVED = "\n\n✅ Tasdiqlandi — {who}, {at}"
 GROUP_REJECTED = "\n\n❌ Rad etildi — {who}, {at}\nSabab: {reason}"
+GROUP_HELLO = ("👋 Salom! Bu guruh ID si: <code>{id}</code>\n\n"
+               "Admin panel → Sozlamalar: shu ID ni «Test chati» yoki «Cheklar uchun admin guruhi» ga kiriting.")
+GROUP_MIGRATED = "Guruh superguruhga aylandi — yangi ID: <code>{id}</code>. Admin paneldagi sozlama o'zi yangilandi."
 GROUP_NOT_ALLOWED = "Bu tugmani faqat admin panelda ro'yxatdan o'tgan admin yoki sotuv menejeri bosa oladi."
 GROUP_ALREADY = "Bu chek allaqachon ko'rib chiqilgan."
 GROUP_REASON = "Rad etish sababi — #{id}:"

@@ -11,7 +11,8 @@ from datetime import datetime, timedelta
 
 from aiogram import Bot
 from aiogram.exceptions import (
-    TelegramBadRequest, TelegramForbiddenError, TelegramNetworkError, TelegramRetryAfter, TelegramUnauthorizedError,
+    TelegramBadRequest, TelegramForbiddenError, TelegramMigrateToChat, TelegramNetworkError, TelegramRetryAfter,
+    TelegramUnauthorizedError,
 )
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -110,6 +111,20 @@ async def sample_variables(db: AsyncSession, funnel: Funnel | None, name: str, t
     return variables(lead, s, trigger_day, now)
 
 
+async def verify_chat(bot: Bot, chat_id: int) -> tuple[int, str]:
+    """Bot shu guruhga yoza oladimi: tekshiradi va tasdiq xabarini yuboradi. Guruh superguruhga aylangan bo'lsa
+    (ID -100... ga o'zgaradi) — yangi ID bilan davom etadi. Qaytaradi: (haqiqiy ID, guruh nomi)."""
+    for _ in range(2):
+        try:
+            chat = await bot.get_chat(chat_id)
+            await bot.send_message(chat.id, "✅ Test chati ulandi. Admin paneldan yuborilgan test xabarlari shu yerga "
+                                            "keladi — lidlar ularni ko'rmaydi.")
+            return chat.id, chat.title or chat.full_name or str(chat.id)
+        except TelegramMigrateToChat as e:
+            chat_id = e.migrate_to_chat_id
+    raise TestSendError("Guruh ID si o'zgargan — guruhda /chatid yozib, yangi ID ni kiriting.")
+
+
 def explain(e: Exception) -> str:
     """Telegram xatosini admin tushunadigan tilga o'giradi."""
     if isinstance(e, TelegramNetworkError):
@@ -124,7 +139,10 @@ def explain(e: Exception) -> str:
     if isinstance(e, TelegramBadRequest):
         msg = e.message.lower()
         if "chat not found" in msg:
-            return "Chat topilmadi: Telegram ID noto'g'ri yoki bot bu chatda yo'q."
+            bot = get_settings().bot_username
+            return (f"Chat topilmadi: bot (@{bot}) bu guruhda yo'q yoki ID noto'g'ri. Botni guruhga qo'shing — u guruhga "
+                    f"to'g'ri ID ni o'zi yozadi (yoki guruhda /chatid@{bot} yozing) va o'sha ID ni kiriting. "
+                    "Guruh superguruhga aylangan bo'lsa, ID -100 bilan boshlanadigan yangisiga o'zgaradi.")
         if "can't parse entities" in msg:
             return f"Matndagi formatlash xato (yopilmagan teg?): {e.message}"
         if "button_type_invalid" in msg or "web app" in msg:
@@ -161,7 +179,15 @@ async def send_test(bot: Bot, db: AsyncSession, me: AdminUser, *, target: str, t
     body = fill(payload.text, vars_)
     header = f"🧪 <b>TEST</b> · {html.escape(title)}\n<i>{html.escape(source)}. Lidlarga yuborilmadi.</i>"
     try:
-        await bot.send_message(chat_id, header, disable_notification=True)
+        try:
+            await bot.send_message(chat_id, header, disable_notification=True)
+        except TelegramMigrateToChat as e:
+            # test guruhi superguruhga aylangan — yangi ID ni saqlab, o'shanga yuboramiz
+            chat_id = e.migrate_to_chat_id
+            kv = await db.get(KeyValue, TEST_CHAT_KEY)
+            if kv:
+                kv.value = chat_id
+            await bot.send_message(chat_id, header, disable_notification=True)
         await send_payload(bot, db, chat_id, payload, body, markup)
     except Exception as e:  # noqa: BLE001 — har qanday xato adminga tushunarli matn bo'lib qaytadi
         log.warning("Test xabar yuborilmadi: %s → %s (%s): %s", title, target_label, me.name, e)

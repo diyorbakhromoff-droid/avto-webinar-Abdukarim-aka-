@@ -87,8 +87,9 @@ Har qanday xabarni lidlarga ketishidan oldin tekshirish: zanjir xabari («Progre
 «Xabar» bloki, «Ommaviy xabar» va lid kartasidagi «Bot orqali xabar» — hammasida «🧪 Test xabarini yuborish» tugmasi.
 
 - Faqat ikki manzil: **o'zingizning Telegramingiz** (Sozlamalar → Foydalanuvchilar → Telegram ID) yoki
-  **test chati** (Sozlamalar → «Test chati»: botni guruhga qo'shib, guruh ID sini kiritasiz; saqlashda bot guruhga
-  «✅ Test chati ulandi» deb yozadi). Ixtiyoriy chat ID qabul qilinmaydi.
+  **test chati** (Sozlamalar → «Test chati»: botni guruhga qo'shganda bot guruh ID sini o'zi yozadi — o'shani
+  kiritasiz; saqlashda bot guruhga «✅ Test chati ulandi» deb yozadi). Ixtiyoriy chat ID qabul qilinmaydi.
+  Guruh superguruhga aylansa (ID -100... ga o'zgaradi), bot test va cheklar guruhi sozlamasini o'zi yangilaydi.
 - Test lidlarga, navbatga (`scheduled_messages`) va lid voqealariga tegmaydi — alohida endpoint, alohida kod
   (`backend/app/services/test_send.py`). Lidlarga yuborish avvalgidek zanjir yoki ommaviy xabar orqali.
 - Xabar asl holida boradi: formatlash, emoji, media, havolalar, tugmalar. Oldidan qisqa «🧪 TEST» sarlavhasi
@@ -201,7 +202,7 @@ O'z domeniga o'tish: `.env` da `APP_DOMAIN`, `ADMIN_DOMAIN`, `MINIAPP_URL`, `ADM
 
 ## Nima tekshirildi va nima tekshirilmadi
 
-- Backend: 82 ta avtomatik test (PostgreSQL bilan), jumladan botning `/start` → telefon → vaqt → tarif →
+- Backend: 84 ta avtomatik test (PostgreSQL bilan), jumladan botning `/start` → telefon → vaqt → tarif →
   chek → guruhda tasdiq oqimi (Telegram so'rovlari soxta sessiyada).
 - Mini App va admin panel haqiqiy API bilan brauzerda (Playwright) ochib ko'rildi: efir sinxron boshlanadi,
   heartbeat va savollar yoziladi, admin paneldagi barcha sahifalar xatosiz yuklanadi.

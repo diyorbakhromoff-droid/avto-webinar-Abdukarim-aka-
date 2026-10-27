@@ -128,10 +128,9 @@ async def put_global(body: GlobalSettingsIn, db: AsyncSession = Depends(get_db),
         title = None
         if cid := data["test_chat_id"]:
             try:
-                chat = await get_bot().get_chat(cid)
-                title = chat.title or chat.full_name or str(cid)
-                await get_bot().send_message(cid, "✅ Test chati ulandi. Admin paneldan yuborilgan test xabarlari "
-                                                  "shu yerga keladi — lidlar ularni ko'rmaydi.")
+                cid, title = await ts.verify_chat(get_bot(), cid)
+            except ts.TestSendError as e:
+                raise HTTPException(400, str(e)) from None
             except Exception as e:  # noqa: BLE001
                 raise HTTPException(400, ts.explain(e)) from None
         await _set_kv(db, ts.TEST_CHAT_KEY, cid)

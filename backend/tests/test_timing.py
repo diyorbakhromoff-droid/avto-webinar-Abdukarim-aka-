@@ -316,3 +316,53 @@ async def test_broadcast_reschedule_cancel_and_expire(db, client):
     await db.refresh(old)
     assert old.status == "expired"
     assert (await db.execute(select(func.count()).select_from(ScheduledMessage))).scalar() == 0
+
+
+# ─────────────────────────── test guruhini ulash ───────────────────────────
+
+async def test_test_chat_follows_supergroup_migration(db, client, tg):
+    from types import SimpleNamespace
+
+    from aiogram.exceptions import TelegramMigrateToChat
+    from aiogram.methods import GetChat
+    _, h = await admin(db, role="super_admin")
+    seen = []
+
+    async def get_chat(chat_id):
+        seen.append(chat_id)
+        if chat_id == -4354067159:   # oddiy guruh superguruhga aylangan
+            raise TelegramMigrateToChat(method=GetChat(chat_id=chat_id), message="migrated",
+                                        migrate_to_chat_id=-1004354067159)
+        return SimpleNamespace(id=chat_id, title="Sotuv test", full_name=None)
+    tg.get_chat = get_chat
+    r = await client.put("/api/admin/settings", headers=h, json={"test_chat_id": -4354067159})
+    assert r.status_code == 200, r.text
+    assert r.json()["test_chat_id"] == -1004354067159 and r.json()["test_chat_title"] == "Sotuv test"
+    assert seen == [-4354067159, -1004354067159]
+    assert [c[1][0] for c in tg.calls if c[0] == "send_message"] == [-1004354067159]   # tasdiq yangi guruhga
+    # admin guruhi sozlamasi tegilmadi
+    assert r.json()["admin_group_chat_id"] is None
+
+    async def missing(chat_id):
+        raise TelegramBadRequest(method=GetChat(chat_id=chat_id), message="Bad Request: chat not found")
+    tg.get_chat = missing
+    r = await client.put("/api/admin/settings", headers=h, json={"test_chat_id": -555})
+    assert r.status_code == 400 and "/chatid" in r.json()["detail"]
+
+
+async def test_bot_announces_group_id_and_tracks_migration(db, bot):
+    from types import SimpleNamespace
+
+    from app.bot.handlers import added_to_group, group_migrated
+    await added_to_group(SimpleNamespace(chat=SimpleNamespace(id=-100777)), bot)
+    assert "-100777" in bot.texts()[0]
+    db.add_all([KeyValue(key="test_chat_id", value=-4354067159), KeyValue(key="admin_group_chat_id", value=-999)])
+    await db.commit()
+    msg = SimpleNamespace(chat=SimpleNamespace(id=-4354067159), migrate_to_chat_id=-1004354067159)
+    await group_migrated(msg, db, bot)
+    kv = await db.get(KeyValue, "test_chat_id")
+    await db.refresh(kv)
+    assert kv.value == -1004354067159
+    other = await db.get(KeyValue, "admin_group_chat_id")
+    await db.refresh(other)
+    assert other.value == -999

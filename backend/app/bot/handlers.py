@@ -5,7 +5,9 @@ from datetime import datetime, timezone
 
 from aiogram import Bot, F, Router
 from aiogram.enums import ChatType
-from aiogram.filters import KICKED, MEMBER, ChatMemberUpdatedFilter, Command, CommandObject, CommandStart, StateFilter
+from aiogram.filters import (
+    JOIN_TRANSITION, KICKED, MEMBER, ChatMemberUpdatedFilter, Command, CommandObject, CommandStart, StateFilter,
+)
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, ChatMemberUpdated, InlineKeyboardButton, InlineKeyboardMarkup, Message
@@ -13,7 +15,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot import flows, texts
-from app.models import ChainMessage, Funnel, Lead, LeadStep, Media, Question, ScheduledMessage, Tariff
+from app.models import ChainMessage, Funnel, KeyValue, Lead, LeadStep, Media, Question, ScheduledMessage, Tariff
 from app.services import flow_engine, payments, test_send
 from app.services.leads import cancel_pending, event, lead_for_tg, plan_stuck_messages, set_step
 from app.services.render import Payload, fill, send_payload, variables
@@ -436,6 +438,31 @@ async def chat_id(message: Message):
     await message.answer(f"Chat ID: <code>{message.chat.id}</code>")
 
 
+groups = F.chat.type.in_({ChatType.GROUP, ChatType.SUPERGROUP})
+
+
+@router.my_chat_member(groups, ChatMemberUpdatedFilter(member_status_changed=JOIN_TRANSITION))
+async def added_to_group(update: ChatMemberUpdated, bot: Bot):
+    """Botni guruhga qo'shishganda — guruhning to'g'ri ID sini o'zi yozadi (qo'lda topish shart emas)."""
+    await bot.send_message(update.chat.id, texts.GROUP_HELLO.format(id=update.chat.id))
+
+
+@router.message(F.migrate_to_chat_id)
+async def group_migrated(message: Message, db: AsyncSession, bot: Bot):
+    """Guruh superguruhga aylansa ID o'zgaradi: sozlamalardagi eski ID yangisiga almashtiriladi."""
+    old, new = message.chat.id, message.migrate_to_chat_id
+    changed = False
+    for key in ("admin_group_chat_id", test_send.TEST_CHAT_KEY):
+        kv = await db.get(KeyValue, key)
+        if kv and kv.value is not None and int(kv.value) == old:
+            kv.value = new
+            changed = True
+    if changed:
+        await db.commit()
+        log.info("Guruh %s superguruhga aylandi: %s — sozlamalar yangilandi", old, new)
+        await bot.send_message(new, texts.GROUP_MIGRATED.format(id=new))
+
+
 async def _admin_or_alert(call: CallbackQuery, db: AsyncSession):
     admin = await payments.is_payment_admin(db, call.from_user.id)
     if not admin:
@@ -482,7 +509,7 @@ async def pay_reason(call: CallbackQuery, db: AsyncSession, bot: Bot):
 
 # ─────────────────────────── bloklash ───────────────────────────
 
-@router.my_chat_member(ChatMemberUpdatedFilter(member_status_changed=KICKED))
+@router.my_chat_member(private, ChatMemberUpdatedFilter(member_status_changed=KICKED))
 async def on_block(update: ChatMemberUpdated, db: AsyncSession):
     """Lid botni bloklasa — yuborish to'xtaydi, statistikada alohida ko'rinadi."""
     leads = (await db.execute(select(Lead).where(Lead.tg_user_id == update.from_user.id))).scalars().all()
@@ -494,7 +521,7 @@ async def on_block(update: ChatMemberUpdated, db: AsyncSession):
     await db.commit()
 
 
-@router.my_chat_member(ChatMemberUpdatedFilter(member_status_changed=MEMBER))
+@router.my_chat_member(private, ChatMemberUpdatedFilter(member_status_changed=MEMBER))
 async def on_unblock(update: ChatMemberUpdated, db: AsyncSession):
     leads = (await db.execute(select(Lead).where(Lead.tg_user_id == update.from_user.id))).scalars().all()
     for lead in leads:
